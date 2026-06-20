@@ -1,40 +1,31 @@
-### 🤗🤗 Happing Coding 🤗🤗
+# Værvakt React
 
-<h1>🌐 Responsive React Weather ⛈ Forecast APP 🌐</h1>
+Ny React-basert base for Værvakt.no, bygget videre fra en fork av
+`vardhan-venkata/react-weather-forecast`.
 
-<h3>Description</h3><hr/>
-<p>This is weather forecasting app developed in the react using Material UI framework, geo location API,openweather API</p>
+## Hva denne basen gjør nå
 
-### Demo URL
+- Henter værdata fra Meteorologisk institutt via MET Locationforecast.
+- Søker etter steder via OpenStreetMap Nominatim.
+- Krever ingen OpenWeather- eller RapidAPI-nøkler.
+- Starter med Kristiansand som standardvisning.
+- Viser vær nå, time-for-time og de neste dagene.
 
-- https://venkata-react-weather-forecast.netlify.app/
+## Kjør lokalt
 
-### API's used in the project
+```powershell
+npm install
+npm start
+```
 
-<ul> 
-<li>
-GEO Location -> https://rapidapi.com/wirefreethought/api/geodb-cities
-</li>
-<li>
-open weather API -> https://openweathermap.org/
-</li>
-</ul>
+## Bygg
 
-Please Signup in the respective websites and get the keys for using the API's
+```powershell
+npm run build
+```
 
-### Packages used
+## Videre arbeid
 
-- Material UI -> UI Library
-- react-scripts -> For Running scripts
-- react-select-async-paginate -> To get the locations async
-
-### Usage
-
-- Clone the repository
-- Do <bold>npm install</bold> to install all the dependencies
-- Replaces the API keys
-- Run the project using <bold>npm run start</bold>
-
-### How can I appreciate this repo? 💙
-
-- By giving this repo a 🌟
+- Lage ny Værvakt-identitet og mobil-first UI.
+- Koble inn egne rapporter, badetemperatur og Værhub.
+- Legge inn PWA/service worker når ny struktur er stabil.

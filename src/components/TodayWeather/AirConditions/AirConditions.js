@@ -13,22 +13,22 @@ const TodayWeatherAirConditions = ({ data }) => {
     content = (
       <>
         <AirConditionsItem
-          title="Real Feel"
+          title="Føles som"
           value={`${Math.round(data.main.feels_like)} °C`}
           type="temperature"
         />
         <AirConditionsItem
-          title="Wind"
+          title="Vind"
           value={`${data.wind.speed} m/s`}
           type="wind"
         />
         <AirConditionsItem
-          title="Clouds"
+          title="Skydekke"
           value={`${Math.round(data.clouds.all)} %`}
           type="clouds"
         />
         <AirConditionsItem
-          title="Humidity"
+          title="Fuktighet"
           value={`${Math.round(data.main.humidity)} %`}
           type="humidity"
         />
@@ -36,7 +36,7 @@ const TodayWeatherAirConditions = ({ data }) => {
     );
   return (
     <Layout
-      title="AIR CONDITIONS"
+      title="DETALJER"
       content={content}
       mb="1rem"
       sx={{ marginTop: '2.9rem' }}

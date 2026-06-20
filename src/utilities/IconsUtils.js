@@ -16,5 +16,5 @@ export function weatherIcon(imageName) {
   const iconsValues = Object.values(allWeatherIcons);
   const iconIndex = iconsKeys.indexOf(imageName);
 
-  return iconsValues[iconIndex];
+  return iconsValues[iconIndex] || allWeatherIcons['unknown.png'];
 }

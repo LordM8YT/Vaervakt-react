@@ -1,46 +1,147 @@
-const GEO_API_URL = "https://wft-geo-db.p.rapidapi.com/v1/geo";
+const MET_API_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact";
+const NOMINATIM_API_URL = "https://nominatim.openstreetmap.org/search";
 
-const WEATHER_API_URL = "https://api.openweathermap.org/data/2.5";
-const WEATHER_API_KEY = "c85a4f532dc2f7e0496949316236ca98";
+function formatDateTime(isoString) {
+  return isoString.replace("T", " ").substring(0, 19);
+}
 
-const GEO_API_OPTIONS = {
-  method: "GET",
-  headers: {
-    "X-RapidAPI-Key": "4f0dcce84bmshac9e329bd55fd14p17ec6fjsnff18c2e61917",
-    "X-RapidAPI-Host": "wft-geo-db.p.rapidapi.com",
-  },
-};
+function isNight(isoString) {
+  const hour = new Date(isoString).getHours();
+  return hour < 7 || hour > 20;
+}
+
+function symbolToIcon(symbolCode = "", isoString = "") {
+  const symbol = symbolCode.toLowerCase();
+  const suffix = isNight(isoString) ? "n" : "d";
+
+  if (symbol.includes("thunder")) return `11${suffix}`;
+  if (symbol.includes("snow") || symbol.includes("sleet")) return `13${suffix}`;
+  if (symbol.includes("fog")) return `50${suffix}`;
+  if (symbol.includes("rain") || symbol.includes("drizzle")) {
+    return symbol.includes("showers") ? `09${suffix}` : `10${suffix}`;
+  }
+  if (symbol.includes("cloudy")) return symbol.includes("partly") ? `02${suffix}` : `04${suffix}`;
+  if (symbol.includes("fair")) return `02${suffix}`;
+  if (symbol.includes("clearsky")) return `01${suffix}`;
+
+  return `03${suffix}`;
+}
+
+function symbolToNorwegian(symbolCode = "") {
+  const symbol = symbolCode.toLowerCase();
+
+  if (symbol.includes("thunder")) return "Torden";
+  if (symbol.includes("snow")) return "Snø";
+  if (symbol.includes("sleet")) return "Sludd";
+  if (symbol.includes("fog")) return "Tåke";
+  if (symbol.includes("rain")) return symbol.includes("showers") ? "Regnbyger" : "Regn";
+  if (symbol.includes("cloudy")) return symbol.includes("partly") ? "Delvis skyet" : "Skyet";
+  if (symbol.includes("fair")) return "Lettskyet";
+  if (symbol.includes("clearsky")) return "Klart";
+
+  return "Skiftende vær";
+}
+
+function toOpenWeatherLikePoint(point) {
+  const details = point.data.instant.details;
+  const nextHour = point.data.next_1_hours || point.data.next_6_hours || {};
+  const symbolCode = nextHour.summary?.symbol_code || "cloudy";
+
+  return {
+    dt: Math.floor(new Date(point.time).getTime() / 1000),
+    dt_txt: formatDateTime(point.time),
+    main: {
+      temp: details.air_temperature,
+      feels_like: details.air_temperature,
+      humidity: details.relative_humidity ?? 0,
+    },
+    weather: [
+      {
+        description: symbolToNorwegian(symbolCode),
+        icon: symbolToIcon(symbolCode, point.time),
+      },
+    ],
+    wind: {
+      speed: details.wind_speed ?? 0,
+    },
+    clouds: {
+      all: details.cloud_area_fraction ?? 0,
+    },
+  };
+}
 
 export async function fetchWeatherData(lat, lon) {
-  try {
-    let [weatherPromise, forcastPromise] = await Promise.all([
-      fetch(
-        `${WEATHER_API_URL}/weather?lat=${lat}&lon=${lon}&appid=${WEATHER_API_KEY}&units=metric`
-      ),
-      fetch(
-        `${WEATHER_API_URL}/forecast?lat=${lat}&lon=${lon}&appid=${WEATHER_API_KEY}&units=metric`
-      ),
-    ]);
+  const response = await fetch(
+    `${MET_API_URL}?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`
+  );
 
-    const weatherResponse = await weatherPromise.json();
-    const forcastResponse = await forcastPromise.json();
-    return [weatherResponse, forcastResponse];
-  } catch (error) {
-    console.log(error);
+  if (!response.ok) {
+    throw new Error("Kunne ikke hente værdata fra MET.");
   }
+
+  const payload = await response.json();
+  const timeseries = payload?.properties?.timeseries || [];
+
+  if (!timeseries.length) {
+    throw new Error("MET returnerte ingen værdata for dette stedet.");
+  }
+
+  const list = timeseries.slice(0, 56).map(toOpenWeatherLikePoint);
+  const current = list[0];
+
+  return [
+    {
+      cod: "200",
+      main: current.main,
+      weather: current.weather,
+      wind: current.wind,
+      clouds: current.clouds,
+    },
+    {
+      cod: "200",
+      list,
+    },
+  ];
 }
 
 export async function fetchCities(input) {
-  try {
-    const response = await fetch(
-      `${GEO_API_URL}/cities?minPopulation=100&namePrefix=${input}`,
-      GEO_API_OPTIONS
-    );
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.log(error);
-    return;
+  if (!input || input.trim().length < 2) {
+    return { data: [] };
   }
+
+  const params = new URLSearchParams({
+    q: input,
+    format: "jsonv2",
+    addressdetails: "1",
+    limit: "8",
+    "accept-language": "nb",
+  });
+
+  const response = await fetch(`${NOMINATIM_API_URL}?${params.toString()}`);
+
+  if (!response.ok) {
+    throw new Error("Kunne ikke søke etter sted.");
+  }
+
+  const results = await response.json();
+
+  return {
+    data: results.map((place) => {
+      const address = place.address || {};
+      const name =
+        address.city ||
+        address.town ||
+        address.village ||
+        address.municipality ||
+        place.name ||
+        place.display_name.split(",")[0];
+
+      return {
+        latitude: place.lat,
+        longitude: place.lon,
+        name,
+        countryCode: address.country_code?.toUpperCase() || "",
+      };
+    }),
+  };
 }

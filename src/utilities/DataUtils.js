@@ -33,8 +33,20 @@ export function getMostFrequentWeather(arr) {
 }
 
 export const descriptionToIconName = (desc, descriptions_list) => {
-  let iconName = descriptions_list.find((item) => item.description === desc);
-  return iconName.icon || 'unknown';
+  const description = String(desc || '').toLowerCase();
+  const iconName = descriptions_list.find(
+    (item) => item.description.toLowerCase() === description
+  );
+
+  if (iconName?.icon) return iconName.icon;
+  if (description.includes('torden')) return '11d.png';
+  if (description.includes('snø') || description.includes('sludd')) return '13d.png';
+  if (description.includes('tåke')) return '50d.png';
+  if (description.includes('regn')) return '10d.png';
+  if (description.includes('sky')) return '04d.png';
+  if (description.includes('klart')) return '01d.png';
+
+  return 'unknown.png';
 };
 
 export const getWeekForecastWeather = (response, descriptions_list) => {

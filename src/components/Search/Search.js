@@ -25,7 +25,7 @@ const Search = ({ onSearchChange }) => {
 
   return (
     <AsyncPaginate
-      placeholder="Search for cities"
+      placeholder="Søk sted, f.eks. Bergen eller Bystranda"
       debounceTimeout={600}
       value={searchValue}
       onChange={onChangeHandler}

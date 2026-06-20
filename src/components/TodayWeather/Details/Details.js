@@ -55,7 +55,7 @@ const Details = ({ data }) => {
       </>
     );
 
-  return <Layout title="CURRENT WEATHER" content={content} />;
+  return <Layout title="VÆRET NÅ" content={content} />;
 };
 
 export default Details;

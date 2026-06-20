@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Box, Container, Grid, Link, SvgIcon, Typography } from "@mui/material";
 import Search from "./components/Search/Search";
 import WeeklyForecast from "./components/WeeklyForecast/WeeklyForecast";
@@ -24,14 +24,15 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(false);
 
-  const searchChangeHandler = async (enteredData) => {
+  const searchChangeHandler = async (enteredData, showLoading = true) => {
     const [latitude, longitude] = enteredData?.value?.split(" ");
 
-    setIsLoading(true);
+    setError(false);
+    if (showLoading) setIsLoading(true);
 
     const currentDate = transformDateFormat();
     const date = new Date();
-    let dt_now = Math.floor(date.getTime() / 1000);
+    const dt_now = Math.floor(date.getTime() / 1000);
 
     try {
       const [todayWeatherResponse, weekForecastResponse] =
@@ -57,8 +58,18 @@ function App() {
       setError(true);
     }
 
-    setIsLoading(false);
+    if (showLoading) setIsLoading(false);
   };
+
+  useEffect(() => {
+    searchChangeHandler(
+      {
+        value: "58.1467 7.9956",
+        label: "Kristiansand, NO",
+      },
+      false
+    );
+  }, []);
 
   let appContent = (
     <Box
@@ -90,8 +101,8 @@ function App() {
           lineHeight: "22px",
         }}
       >
-        Explore current weather data and 6-day forecast of more than 200,000
-        cities!
+        Søk etter et sted, eller bruk standardvisningen for Kristiansand. Data
+        hentes fra Meteorologisk institutt.
       </Typography>
     </Box>
   );
@@ -116,7 +127,7 @@ function App() {
       <ErrorBox
         margin="3rem auto"
         flex="inherit"
-        errorMessage="Something went wrong"
+        errorMessage="Noe gikk galt. Prøv igjen."
       />
     );
   }
@@ -143,7 +154,7 @@ function App() {
               fontFamily: "Poppins",
             }}
           >
-            Loading...
+            Laster værdata...
           </Typography>
         </LoadingBox>
       </Box>
@@ -192,7 +203,7 @@ function App() {
 
             <UTCDatetime />
             <Link
-              href="https://github.com/vardhan-venkata/"
+              href="https://github.com/LordM8YT/Vaervakt-react"
               target="_blank"
               underline="none"
               sx={{ display: "flex" }}
