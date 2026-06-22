@@ -1,6 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@300;400;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&family=Roboto+Condensed:wght@300;400;700&display=swap');
 
+html {
+  width: 100%;
+  min-height: 100%;
+  background: #020617;
+  overscroll-behavior: none;
+  touch-action: pan-y;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   font-family: 'Poppins', Arial, sans-serif !important;
@@ -10,11 +20,38 @@ body {
   background-repeat: no-repeat;
   background-size: contain;
   min-height: 100svh;
+  width: 100%;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  touch-action: pan-y;
   background:
     radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.18), transparent 32%),
     radial-gradient(circle at 88% 12%, rgba(14, 165, 233, 0.12), transparent 30%),
     linear-gradient(180deg, #0f172a 0%, #020617 100%);
 }
+
+#root {
+  width: 100%;
+  min-height: 100svh;
+  overflow-x: clip;
+  isolation: isolate;
+}
+
+button,
+input,
+select,
+textarea {
+  font-size: 16px;
+  touch-action: manipulation;
+}
+
+img,
+canvas,
+svg,
+video {
+  max-width: 100%;
+}
+
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
