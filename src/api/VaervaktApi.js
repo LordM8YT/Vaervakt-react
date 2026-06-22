@@ -15,11 +15,13 @@ function buildUrl(path, params = {}) {
 
 async function requestJson(path, options = {}) {
   const target = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  const isFormData =
+    typeof FormData !== "undefined" && options.body instanceof FormData;
   const response = await fetch(target, {
     ...options,
     headers: {
       Accept: "application/json",
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(!isFormData && options.body ? { "Content-Type": "application/json" } : {}),
       ...(options.headers || {}),
     },
   });
@@ -71,6 +73,18 @@ export function fetchHubPosts({ lat, lon, name }, sort = "new", limit = 8) {
   return requestJson(url);
 }
 
+export function fetchGlimpsePhotos({ lat, lon, name }, limit = 12) {
+  const url = buildUrl("/api/glimpses.php", {
+    limit,
+    lat,
+    lon,
+    radiusKm: 35,
+    location: name,
+  });
+
+  return requestJson(url);
+}
+
 export function loginHubProfile(displayName, pin, action = "login") {
   return requestJson("/api/hub.php", {
     method: "POST",
@@ -82,6 +96,13 @@ export function createHubPost(post) {
   return requestJson("/api/hub.php", {
     method: "POST",
     body: JSON.stringify({ action: "create", ...post }),
+  });
+}
+
+export function uploadGlimpsePhoto(formData) {
+  return requestJson("/api/glimpses.php", {
+    method: "POST",
+    body: formData,
   });
 }
 

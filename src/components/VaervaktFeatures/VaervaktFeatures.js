@@ -12,16 +12,19 @@ import {
 } from "@mui/material";
 import {
   createHubPost,
+  fetchGlimpsePhotos,
   fetchHubPosts,
   fetchReports,
   loginHubProfile,
   submitReport,
+  uploadGlimpsePhoto,
   voteHubPost,
 } from "../../api/VaervaktApi";
 
 const PROFILE_KEY = "vaervakt_hub_profile";
 const REPORTER_KEY = "vaervakt_reporter_name";
 const VIPPS_URL = "https://betal.vipps.no/opy01u";
+const MAX_CLIENT_IMAGE_BYTES = 10 * 1024 * 1024;
 
 const CONDITIONS = [
   { value: "Sol / Klart", label: "Sol", icon: "☀️" },
@@ -103,6 +106,13 @@ const CATEGORIES = [
   { value: "question", label: "Spørsmål" },
   { value: "warning", label: "Obs" },
   { value: "tip", label: "Tips" },
+];
+
+const GLIMPSE_TTLS = [
+  { hours: 1, label: "1 t" },
+  { hours: 3, label: "3 t" },
+  { hours: 12, label: "12 t" },
+  { hours: 24, label: "24 t" },
 ];
 
 const sectionSx = {
@@ -220,6 +230,74 @@ function getSnapTypeForPost(post) {
 
 function getCategoryLabel(category) {
   return CATEGORIES.find((item) => item.value === category)?.label || "Glimt";
+}
+
+function formatExpiry(expiresAt) {
+  const expires = new Date(String(expiresAt).replace(" ", "T"));
+  const diffMs = expires.getTime() - Date.now();
+  if (!Number.isFinite(diffMs) || diffMs <= 0) {
+    return "Utløper nå";
+  }
+
+  const minutes = Math.ceil(diffMs / 60000);
+  if (minutes < 60) {
+    return `${minutes} min igjen`;
+  }
+
+  return `${Math.ceil(minutes / 60)} t igjen`;
+}
+
+function compressImageFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) {
+      reject(new Error("Velg et bilde."));
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const maxSide = 1600;
+      const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        resolve(file);
+        return;
+      }
+
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+
+          resolve(
+            new File([blob], `${Date.now()}-vaerglimt.jpg`, {
+              type: "image/jpeg",
+              lastModified: Date.now(),
+            })
+          );
+        },
+        "image/jpeg",
+        0.84
+      );
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Kunne ikke lese bildet."));
+    };
+
+    image.src = objectUrl;
+  });
 }
 
 function EmptyState({ children }) {
@@ -349,6 +427,7 @@ function SnapTypeButton({ type, selected, onClick }) {
 function VaervaktFeatures({ selectedLocation, weather }) {
   const [reports, setReports] = useState([]);
   const [posts, setPosts] = useState([]);
+  const [photos, setPhotos] = useState([]);
   const [sort, setSort] = useState("new");
   const [isLoading, setIsLoading] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -362,6 +441,9 @@ function VaervaktFeatures({ selectedLocation, weather }) {
   const [snapForm, setSnapForm] = useState({
     type: "rain",
     note: "",
+    file: null,
+    previewUrl: "",
+    ttlHours: 3,
   });
 
   const location = useMemo(
@@ -376,11 +458,20 @@ function VaervaktFeatures({ selectedLocation, weather }) {
   const selectedSnapType =
     SNAP_TYPES.find((type) => type.value === snapForm.type) || SNAP_TYPES[0];
 
+  useEffect(() => {
+    return () => {
+      if (snapForm.previewUrl) {
+        URL.revokeObjectURL(snapForm.previewUrl);
+      }
+    };
+  }, [snapForm.previewUrl]);
+
   const refreshCommunityData = async () => {
     setIsLoading(true);
-    const [reportResult, postResult] = await Promise.allSettled([
+    const [reportResult, postResult, photoResult] = await Promise.allSettled([
       fetchReports(location),
       fetchHubPosts(location, sort),
+      fetchGlimpsePhotos(location),
     ]);
 
     if (reportResult.status === "fulfilled") {
@@ -391,7 +482,15 @@ function VaervaktFeatures({ selectedLocation, weather }) {
       setPosts(postResult.value.posts || []);
     }
 
-    if (reportResult.status === "rejected" || postResult.status === "rejected") {
+    if (photoResult.status === "fulfilled") {
+      setPhotos(photoResult.value.photos || []);
+    }
+
+    if (
+      reportResult.status === "rejected" ||
+      postResult.status === "rejected" ||
+      photoResult.status === "rejected"
+    ) {
       setNotice({
         severity: "warning",
         text: "Noe av lokaldelen kunne ikke lastes akkurat nå.",
@@ -456,6 +555,46 @@ function VaervaktFeatures({ selectedLocation, weather }) {
     await handleProfileAction("login");
   };
 
+  const handlePhotoChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setNotice({ severity: "info", text: "Velg en bildefil." });
+      return;
+    }
+
+    if (file.size > MAX_CLIENT_IMAGE_BYTES) {
+      setNotice({ severity: "info", text: "Bildet er for stort. Velg et bilde under 10 MB." });
+      return;
+    }
+
+    try {
+      const compressed = await compressImageFile(file);
+      const previewUrl = URL.createObjectURL(compressed);
+      setSnapForm((current) => {
+        if (current.previewUrl) {
+          URL.revokeObjectURL(current.previewUrl);
+        }
+        return { ...current, file: compressed, previewUrl };
+      });
+    } catch (error) {
+      setNotice({ severity: "error", text: error.message });
+    }
+  };
+
+  const clearPhoto = () => {
+    setSnapForm((current) => {
+      if (current.previewUrl) {
+        URL.revokeObjectURL(current.previewUrl);
+      }
+      return { ...current, file: null, previewUrl: "" };
+    });
+  };
+
   const handleSnapSubmit = async (event) => {
     event.preventDefault();
 
@@ -465,20 +604,43 @@ function VaervaktFeatures({ selectedLocation, weather }) {
     }
 
     try {
-      await createHubPost({
-        userId: profile.user.id,
-        token: profile.token,
-        title: selectedSnapType.title,
-        body: snapForm.note.trim() || selectedSnapType.body,
-        category: selectedSnapType.category,
-        location: location.name,
-        lat: location.lat,
-        lon: location.lon,
-        weatherCondition: selectedSnapType.label || getWeatherSummary(weather),
-        temperature: getWeatherTemp(weather),
-      });
-      setSnapForm((current) => ({ ...current, note: "" }));
-      setNotice({ severity: "success", text: "Værglimtet er publisert." });
+      if (snapForm.file) {
+        const formData = new FormData();
+        formData.append("userId", profile.user.id);
+        formData.append("token", profile.token);
+        formData.append("snapType", selectedSnapType.value);
+        formData.append("title", selectedSnapType.title);
+        formData.append("note", snapForm.note.trim() || selectedSnapType.body);
+        formData.append("location", location.name);
+        if (location.lat !== undefined && location.lat !== null) {
+          formData.append("lat", location.lat);
+        }
+        if (location.lon !== undefined && location.lon !== null) {
+          formData.append("lon", location.lon);
+        }
+        formData.append("ttlHours", snapForm.ttlHours);
+        formData.append("image", snapForm.file, snapForm.file.name || "vaerglimt.jpg");
+
+        await uploadGlimpsePhoto(formData);
+        clearPhoto();
+        setSnapForm((current) => ({ ...current, note: "" }));
+        setNotice({ severity: "success", text: "Bildeglimtet er publisert." });
+      } else {
+        await createHubPost({
+          userId: profile.user.id,
+          token: profile.token,
+          title: selectedSnapType.title,
+          body: snapForm.note.trim() || selectedSnapType.body,
+          category: selectedSnapType.category,
+          location: location.name,
+          lat: location.lat,
+          lon: location.lon,
+          weatherCondition: selectedSnapType.label || getWeatherSummary(weather),
+          temperature: getWeatherTemp(weather),
+        });
+        setSnapForm((current) => ({ ...current, note: "" }));
+        setNotice({ severity: "success", text: "Værglimtet er publisert." });
+      }
       await refreshCommunityData();
     } catch (error) {
       setNotice({ severity: "error", text: error.message });
@@ -760,7 +922,7 @@ function VaervaktFeatures({ selectedLocation, weather }) {
                         Visningsnavn
                       </Typography>
                       <Typography sx={{ color: "rgba(255,255,255,.45)", fontSize: "0.74rem", mt: 0.25 }}>
-                        Bruk bare navn og PIN. Ingen e-post eller tracking-konto.
+                        Bruk bare navn og PIN for å sende bildeglimt. Ingen e-post eller tracking-konto.
                       </Typography>
                     </Box>
                     <TextField
@@ -836,6 +998,103 @@ function VaervaktFeatures({ selectedLocation, weather }) {
                       ))}
                     </Stack>
 
+                    <Stack spacing={1}>
+                      <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
+                        <Typography sx={{ color: "rgba(255,255,255,.68)", fontSize: "0.78rem", fontWeight: 700 }}>
+                          Bildeglimt
+                        </Typography>
+                        <Typography sx={{ color: "rgba(255,255,255,.42)", fontSize: "0.72rem" }}>
+                          Slettes etter valgt tid
+                        </Typography>
+                      </Stack>
+
+                      {snapForm.previewUrl ? (
+                        <Box
+                          sx={{
+                            position: "relative",
+                            overflow: "hidden",
+                            borderRadius: "20px",
+                            border: "1px solid rgba(255,255,255,.1)",
+                            minHeight: 190,
+                            backgroundColor: "rgba(255,255,255,.04)",
+                          }}
+                        >
+                          <Box
+                            component="img"
+                            src={snapForm.previewUrl}
+                            alt="Forhåndsvisning av bildeglimt"
+                            sx={{
+                              display: "block",
+                              width: "100%",
+                              maxHeight: 260,
+                              objectFit: "cover",
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            onClick={clearPhoto}
+                            sx={{
+                              position: "absolute",
+                              top: 10,
+                              right: 10,
+                              minWidth: "auto",
+                              borderRadius: "999px",
+                              px: 1.2,
+                              color: "white",
+                              backgroundColor: "rgba(2,6,23,.72)",
+                              textTransform: "none",
+                              "&:hover": { backgroundColor: "rgba(2,6,23,.88)" },
+                            }}
+                          >
+                            Fjern
+                          </Button>
+                        </Box>
+                      ) : (
+                        <Button
+                          component="label"
+                          type="button"
+                          sx={{
+                            borderRadius: "18px",
+                            py: 1.8,
+                            color: "rgba(255,255,255,.86)",
+                            border: "1px dashed rgba(255,255,255,.18)",
+                            background:
+                              "linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.025))",
+                            textTransform: "none",
+                            fontWeight: 800,
+                            "&:hover": {
+                              background:
+                                "linear-gradient(180deg, rgba(255,255,255,.1), rgba(255,255,255,.04))",
+                            },
+                          }}
+                        >
+                          Legg til bilde
+                          <input
+                            hidden
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            capture="environment"
+                            onChange={handlePhotoChange}
+                          />
+                        </Button>
+                      )}
+
+                      <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                        {GLIMPSE_TTLS.map((ttl) => (
+                          <WeatherPillButton
+                            key={ttl.hours}
+                            type="button"
+                            selected={snapForm.ttlHours === ttl.hours}
+                            onClick={() =>
+                              setSnapForm((current) => ({ ...current, ttlHours: ttl.hours }))
+                            }
+                          >
+                            {ttl.label}
+                          </WeatherPillButton>
+                        ))}
+                      </Stack>
+                    </Stack>
+
                     <TextField
                       label="Legg til kort tekst"
                       placeholder="F.eks. plutselig regn ved sentrum"
@@ -864,7 +1123,7 @@ function VaervaktFeatures({ selectedLocation, weather }) {
                         },
                       }}
                     >
-                      Send {selectedSnapType.icon} værglimt
+                      Send {selectedSnapType.icon} {snapForm.file ? "bildeglimt" : "værglimt"}
                     </Button>
                   </Stack>
                 )}
@@ -873,7 +1132,107 @@ function VaervaktFeatures({ selectedLocation, weather }) {
 
             <Grid item xs={12} md={7}>
               <Stack spacing={0.9}>
-                {posts.length === 0 && (
+                {photos.length > 0 && (
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{
+                      overflowX: "auto",
+                      pb: 0.5,
+                      scrollbarWidth: "none",
+                      "&::-webkit-scrollbar": { display: "none" },
+                    }}
+                  >
+                    {photos.map((photo) => {
+                      const snapType =
+                        SNAP_TYPES.find((type) => type.value === photo.snapType) ||
+                        getSnapTypeForPost({
+                          title: photo.title,
+                          body: photo.note,
+                          category: "general",
+                          weatherCondition: photo.snapType,
+                        });
+
+                      return (
+                        <Box
+                          key={photo.id}
+                          sx={{
+                            position: "relative",
+                            flex: "0 0 172px",
+                            height: 246,
+                            overflow: "hidden",
+                            borderRadius: "24px",
+                            border: "1px solid rgba(255,255,255,.12)",
+                            backgroundColor: "rgba(7,12,27,.9)",
+                            boxShadow: "0 18px 36px rgba(2,6,23,.26)",
+                          }}
+                        >
+                          <Box
+                            component="img"
+                            src={photo.imageUrl}
+                            alt={photo.title}
+                            loading="lazy"
+                            sx={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                              display: "block",
+                            }}
+                          />
+                          <Box
+                            sx={{
+                              position: "absolute",
+                              inset: 0,
+                              background:
+                                "linear-gradient(180deg, rgba(2,6,23,.15), rgba(2,6,23,.2) 42%, rgba(2,6,23,.88))",
+                            }}
+                          />
+                          <Stack
+                            justifyContent="space-between"
+                            sx={{
+                              position: "absolute",
+                              inset: 0,
+                              p: 1.15,
+                            }}
+                          >
+                            <Stack direction="row" justifyContent="space-between" alignItems="center">
+                              <Typography sx={{ fontSize: "1.55rem", lineHeight: 1 }}>
+                                {snapType.icon}
+                              </Typography>
+                              <Chip
+                                label={formatExpiry(photo.expiresAt)}
+                                size="small"
+                                sx={{
+                                  height: 22,
+                                  borderRadius: "999px",
+                                  color: "#06111f",
+                                  backgroundColor: "rgba(186,230,253,.86)",
+                                  fontSize: "0.66rem",
+                                  fontWeight: 900,
+                                }}
+                              />
+                            </Stack>
+                            <Box>
+                              <Typography sx={{ color: "white", fontWeight: 900, fontSize: "0.95rem", lineHeight: 1.15 }}>
+                                {photo.title}
+                              </Typography>
+                              {photo.note && (
+                                <Typography sx={{ color: "rgba(255,255,255,.78)", fontSize: "0.75rem", mt: 0.35, lineHeight: 1.35 }}>
+                                  {photo.note}
+                                </Typography>
+                              )}
+                              <Typography noWrap sx={{ color: "rgba(255,255,255,.58)", fontSize: "0.68rem", mt: 0.55 }}>
+                                {photo.displayName} · {photo.location}
+                              </Typography>
+                            </Box>
+                          </Stack>
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                )}
+
+                {posts.length === 0 && photos.length === 0 && (
                   <EmptyState>Ingen værglimt i nærheten enda. Send det første.</EmptyState>
                 )}
                 {posts.map((post) => {
