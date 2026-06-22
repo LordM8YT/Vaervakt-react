@@ -112,3 +112,33 @@ export function voteHubPost(vote) {
     body: JSON.stringify({ action: "vote", ...vote }),
   });
 }
+
+export function trackVisit(path = window.location.pathname) {
+  try {
+    const target = `${API_BASE}/api/track.php`;
+    const payload = JSON.stringify({
+      path,
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+    });
+
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(
+        target,
+        new Blob([payload], { type: "application/json" })
+      );
+      return;
+    }
+
+    fetch(target, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: payload,
+      keepalive: true,
+    }).catch(() => {});
+  } catch (error) {
+    // Tracking should never block the weather app.
+  }
+}

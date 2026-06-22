@@ -4,6 +4,7 @@ import Search from "./components/Search/Search";
 import WeeklyForecast from "./components/WeeklyForecast/WeeklyForecast";
 import TodayWeather from "./components/TodayWeather/TodayWeather";
 import { fetchWeatherData, reverseGeocode } from "./api/OpenWeatherService";
+import { trackVisit } from "./api/VaervaktApi";
 import UTCDatetime from "./components/Reusable/UTCDatetime";
 import LoadingBox from "./components/Reusable/LoadingBox";
 import { ReactComponent as SplashIcon } from "./assets/splash-icon.svg";
@@ -108,6 +109,7 @@ function App() {
   };
 
   useEffect(() => {
+    trackVisit();
     searchChangeHandler(
       {
         value: "58.1467 7.9956",
