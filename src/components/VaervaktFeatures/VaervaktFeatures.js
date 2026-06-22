@@ -4,7 +4,6 @@ import {
   Box,
   Button,
   Chip,
-  Divider,
   Grid,
   MenuItem,
   Stack,
@@ -33,10 +32,76 @@ const CONDITIONS = [
   { value: "Torden", label: "Torden", icon: "⛈️" },
 ];
 
+const SNAP_TYPES = [
+  {
+    value: "sun",
+    label: "Sol",
+    icon: "☀️",
+    title: "Sol nå",
+    body: "Sola titter frem her.",
+    category: "tip",
+    keywords: ["sol", "klart", "lysner"],
+  },
+  {
+    value: "rain",
+    label: "Regn",
+    icon: "🌧️",
+    title: "Regn nå",
+    body: "Det regner lokalt akkurat nå.",
+    category: "general",
+    keywords: ["regn", "byge", "vått"],
+  },
+  {
+    value: "wind",
+    label: "Vind",
+    icon: "💨",
+    title: "Mye vind",
+    body: "Vinden merkes godt her.",
+    category: "warning",
+    keywords: ["vind", "blåser", "kast"],
+  },
+  {
+    value: "fog",
+    label: "Tåke",
+    icon: "🌫️",
+    title: "Tåke",
+    body: "Det er redusert sikt her.",
+    category: "warning",
+    keywords: ["tåke", "sikt"],
+  },
+  {
+    value: "slippery",
+    label: "Glatt",
+    icon: "🧊",
+    title: "Glatt føre",
+    body: "Det er glatt lokalt.",
+    category: "warning",
+    keywords: ["glatt", "is", "føre"],
+  },
+  {
+    value: "thunder",
+    label: "Lyn",
+    icon: "⛈️",
+    title: "Lyn og torden",
+    body: "Lyn eller torden observert i området.",
+    category: "warning",
+    keywords: ["lyn", "torden", "uvær"],
+  },
+  {
+    value: "beach",
+    label: "Badevær",
+    icon: "🏖️",
+    title: "Badevær",
+    body: "Det ser fint ut for bading her.",
+    category: "tip",
+    keywords: ["bade", "strand", "vann"],
+  },
+];
+
 const CATEGORIES = [
-  { value: "general", label: "Oppdatering" },
+  { value: "general", label: "Glimt" },
   { value: "question", label: "Spørsmål" },
-  { value: "warning", label: "Obs-varsel" },
+  { value: "warning", label: "Obs" },
   { value: "tip", label: "Tips" },
 ];
 
@@ -141,6 +206,22 @@ function getConditionIcon(condition = "") {
   return match?.icon || "🌦️";
 }
 
+function getSnapTypeForPost(post) {
+  const text = `${post.title || ""} ${post.body || ""} ${post.category || ""} ${
+    post.weatherCondition || ""
+  }`.toLowerCase();
+
+  return (
+    SNAP_TYPES.find((type) => type.keywords.some((keyword) => text.includes(keyword))) ||
+    SNAP_TYPES.find((type) => type.category === post.category) ||
+    SNAP_TYPES[0]
+  );
+}
+
+function getCategoryLabel(category) {
+  return CATEGORIES.find((item) => item.value === category)?.label || "Glimt";
+}
+
 function EmptyState({ children }) {
   return (
     <Box
@@ -229,6 +310,42 @@ function WeatherPillButton({ children, selected, ...props }) {
   );
 }
 
+function SnapTypeButton({ type, selected, onClick }) {
+  return (
+    <Button
+      type="button"
+      onClick={onClick}
+      sx={{
+        minWidth: 0,
+        width: { xs: 68, sm: 76 },
+        height: 82,
+        borderRadius: "20px",
+        flexDirection: "column",
+        gap: 0.45,
+        color: selected ? "#06111f" : "rgba(255,255,255,.82)",
+        background: selected
+          ? "linear-gradient(160deg, #bae6fd, #38bdf8)"
+          : "linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.035))",
+        border: selected
+          ? "1px solid rgba(186,230,253,.72)"
+          : "1px solid rgba(255,255,255,.09)",
+        textTransform: "none",
+        boxShadow: selected ? "0 12px 26px rgba(56,189,248,.2)" : "none",
+        "&:hover": {
+          background: selected
+            ? "linear-gradient(160deg, #e0f2fe, #38bdf8)"
+            : "linear-gradient(180deg, rgba(255,255,255,.11), rgba(255,255,255,.05))",
+        },
+      }}
+    >
+      <Typography sx={{ fontSize: "1.55rem", lineHeight: 1 }}>{type.icon}</Typography>
+      <Typography sx={{ fontSize: "0.72rem", fontWeight: 800, lineHeight: 1.1 }}>
+        {type.label}
+      </Typography>
+    </Button>
+  );
+}
+
 function VaervaktFeatures({ selectedLocation, weather }) {
   const [reports, setReports] = useState([]);
   const [posts, setPosts] = useState([]);
@@ -242,10 +359,9 @@ function VaervaktFeatures({ selectedLocation, weather }) {
     temperature: "",
     condition: "Sol / Klart",
   });
-  const [postForm, setPostForm] = useState({
-    title: "",
-    body: "",
-    category: "general",
+  const [snapForm, setSnapForm] = useState({
+    type: "rain",
+    note: "",
   });
 
   const location = useMemo(
@@ -256,6 +372,9 @@ function VaervaktFeatures({ selectedLocation, weather }) {
     }),
     [selectedLocation]
   );
+
+  const selectedSnapType =
+    SNAP_TYPES.find((type) => type.value === snapForm.type) || SNAP_TYPES[0];
 
   const refreshCommunityData = async () => {
     setIsLoading(true);
@@ -337,11 +456,11 @@ function VaervaktFeatures({ selectedLocation, weather }) {
     await handleProfileAction("login");
   };
 
-  const handlePostSubmit = async (event) => {
+  const handleSnapSubmit = async (event) => {
     event.preventDefault();
 
     if (!profile) {
-      setNotice({ severity: "info", text: "Logg inn med navn og PIN før du poster." });
+      setNotice({ severity: "info", text: "Logg inn med navn og PIN før du sender værglimt." });
       return;
     }
 
@@ -349,17 +468,17 @@ function VaervaktFeatures({ selectedLocation, weather }) {
       await createHubPost({
         userId: profile.user.id,
         token: profile.token,
-        title: postForm.title.trim(),
-        body: postForm.body.trim(),
-        category: postForm.category,
+        title: selectedSnapType.title,
+        body: snapForm.note.trim() || selectedSnapType.body,
+        category: selectedSnapType.category,
         location: location.name,
         lat: location.lat,
         lon: location.lon,
-        weatherCondition: getWeatherSummary(weather),
+        weatherCondition: selectedSnapType.label || getWeatherSummary(weather),
         temperature: getWeatherTemp(weather),
       });
-      setPostForm({ title: "", body: "", category: "general" });
-      setNotice({ severity: "success", text: "Innlegget er publisert." });
+      setSnapForm((current) => ({ ...current, note: "" }));
+      setNotice({ severity: "success", text: "Værglimtet er publisert." });
       await refreshCommunityData();
     } catch (error) {
       setNotice({ severity: "error", text: error.message });
@@ -394,7 +513,7 @@ function VaervaktFeatures({ selectedLocation, weather }) {
   const logout = () => {
     setProfile(null);
     window.localStorage.removeItem(PROFILE_KEY);
-    setNotice({ severity: "info", text: "Du er logget ut av Værhub." });
+    setNotice({ severity: "info", text: "Du er logget ut av Værglimt." });
   };
 
   return (
@@ -617,15 +736,15 @@ function VaervaktFeatures({ selectedLocation, weather }) {
 
         <Box sx={sectionSx}>
           <SectionHeading
-            title="Værhub"
-            subtitle="Spør, varsle og del små lokale værtegn."
+            title="Værglimt"
+            subtitle="Korte lokale værtegn, litt mer Snap enn forum."
             action={
               <Stack direction="row" spacing={0.75}>
                 <WeatherPillButton selected={sort === "new"} onClick={() => setSort("new")}>
-                  Nyeste
+                  Fersk
                 </WeatherPillButton>
                 <WeatherPillButton selected={sort === "top"} onClick={() => setSort("top")}>
-                  Topp
+                  Nyttig
                 </WeatherPillButton>
               </Stack>
             }
@@ -638,10 +757,10 @@ function VaervaktFeatures({ selectedLocation, weather }) {
                   <Stack component="form" spacing={1.15} onSubmit={handleProfileSubmit}>
                     <Box>
                       <Typography sx={{ color: "white", fontWeight: 700, fontSize: "0.94rem" }}>
-                        Lokal profil
+                        Visningsnavn
                       </Typography>
                       <Typography sx={{ color: "rgba(255,255,255,.45)", fontSize: "0.74rem", mt: 0.25 }}>
-                        Bare navn og PIN. Ingen e-post eller tracking-konto.
+                        Bruk bare navn og PIN. Ingen e-post eller tracking-konto.
                       </Typography>
                     </Box>
                     <TextField
@@ -672,7 +791,7 @@ function VaervaktFeatures({ selectedLocation, weather }) {
                     />
                     <Stack direction="row" spacing={1}>
                       <WeatherPillButton type="submit" selected>
-                        Logg inn
+                        Fortsett
                       </WeatherPillButton>
                       <WeatherPillButton type="button" onClick={() => handleProfileAction("register")}>
                         Opprett
@@ -680,151 +799,167 @@ function VaervaktFeatures({ selectedLocation, weather }) {
                     </Stack>
                   </Stack>
                 ) : (
-                  <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
-                    <Box>
-                      <Typography sx={{ color: "white", fontWeight: 700, fontSize: "0.94rem" }}>
-                        {profile.user.displayName}
-                      </Typography>
-                      <Typography sx={{ color: "rgba(255,255,255,.45)", fontSize: "0.74rem" }}>
-                        Klar til å poste og stemme.
-                      </Typography>
-                    </Box>
-                    <WeatherPillButton onClick={logout}>Logg ut</WeatherPillButton>
+                  <Stack component="form" spacing={1.15} onSubmit={handleSnapSubmit}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
+                      <Box>
+                        <Typography sx={{ color: "white", fontWeight: 700, fontSize: "0.94rem" }}>
+                          Hva skjer ute?
+                        </Typography>
+                        <Typography sx={{ color: "rgba(255,255,255,.45)", fontSize: "0.74rem", mt: 0.25 }}>
+                          Poster som {profile.user.displayName}.
+                        </Typography>
+                      </Box>
+                      <WeatherPillButton type="button" onClick={logout}>
+                        Bytt
+                      </WeatherPillButton>
+                    </Stack>
+
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{
+                        overflowX: "auto",
+                        pb: 0.4,
+                        scrollbarWidth: "none",
+                        "&::-webkit-scrollbar": { display: "none" },
+                      }}
+                    >
+                      {SNAP_TYPES.map((type) => (
+                        <SnapTypeButton
+                          key={type.value}
+                          type={type}
+                          selected={snapForm.type === type.value}
+                          onClick={() =>
+                            setSnapForm((current) => ({ ...current, type: type.value }))
+                          }
+                        />
+                      ))}
+                    </Stack>
+
+                    <TextField
+                      label="Legg til kort tekst"
+                      placeholder="F.eks. plutselig regn ved sentrum"
+                      value={snapForm.note}
+                      onChange={(event) =>
+                        setSnapForm((current) => ({ ...current, note: event.target.value }))
+                      }
+                      multiline
+                      minRows={2}
+                      fullWidth
+                      sx={inputSx}
+                    />
+
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      sx={{
+                        borderRadius: "14px",
+                        py: 1.05,
+                        color: "#06111f",
+                        fontWeight: 900,
+                        background: "linear-gradient(135deg, #7dd3fc, #38bdf8)",
+                        textTransform: "none",
+                        "&:hover": {
+                          background: "linear-gradient(135deg, #bae6fd, #38bdf8)",
+                        },
+                      }}
+                    >
+                      Send {selectedSnapType.icon} værglimt
+                    </Button>
                   </Stack>
                 )}
-
-                <Divider sx={{ borderColor: "rgba(255,255,255,.08)" }} />
-
-                <Stack component="form" spacing={1.15} onSubmit={handlePostSubmit}>
-                  <TextField
-                    label="Tittel"
-                    value={postForm.title}
-                    onChange={(event) =>
-                      setPostForm((current) => ({ ...current, title: event.target.value }))
-                    }
-                    fullWidth
-                    sx={inputSx}
-                  />
-                  <TextField
-                    label="Hva skjer?"
-                    value={postForm.body}
-                    onChange={(event) =>
-                      setPostForm((current) => ({ ...current, body: event.target.value }))
-                    }
-                    multiline
-                    minRows={2}
-                    fullWidth
-                    sx={inputSx}
-                  />
-                  <TextField
-                    select
-                    label="Kategori"
-                    value={postForm.category}
-                    onChange={(event) =>
-                      setPostForm((current) => ({
-                        ...current,
-                        category: event.target.value,
-                      }))
-                    }
-                    fullWidth
-                    SelectProps={{ MenuProps: selectMenuProps }}
-                    sx={inputSx}
-                  >
-                    {CATEGORIES.map((category) => (
-                      <MenuItem key={category.value} value={category.value}>
-                        {category.label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    disabled={!profile}
-                    sx={{
-                      borderRadius: "14px",
-                      py: 1.05,
-                      color: "#06111f",
-                      fontWeight: 900,
-                      background: "linear-gradient(135deg, #7dd3fc, #38bdf8)",
-                      textTransform: "none",
-                      "&:hover": {
-                        background: "linear-gradient(135deg, #bae6fd, #38bdf8)",
-                      },
-                    }}
-                  >
-                    Post i Værhub
-                  </Button>
-                </Stack>
               </Stack>
             </Grid>
 
             <Grid item xs={12} md={7}>
               <Stack spacing={0.9}>
                 {posts.length === 0 && (
-                  <EmptyState>Ingen innlegg i nærheten enda. Start praten.</EmptyState>
+                  <EmptyState>Ingen værglimt i nærheten enda. Send det første.</EmptyState>
                 )}
-                {posts.map((post) => (
-                  <Box key={post.id} sx={{ ...cardSx, p: 1.3 }}>
-                    <Stack direction="row" justifyContent="space-between" gap={1.5}>
-                      <Box minWidth={0}>
-                        <Stack direction="row" spacing={0.7} alignItems="center" sx={{ mb: 0.65 }}>
-                          <Chip
-                            label={CATEGORIES.find((item) => item.value === post.category)?.label || "Info"}
-                            size="small"
+                {posts.map((post) => {
+                  const snapType = getSnapTypeForPost(post);
+                  return (
+                    <Box
+                      key={post.id}
+                      sx={{
+                        ...cardSx,
+                        p: 1.25,
+                        background:
+                          "linear-gradient(135deg, rgba(56,189,248,.1), rgba(9,16,36,.86) 40%, rgba(7,12,27,.92))",
+                      }}
+                    >
+                      <Stack direction="row" justifyContent="space-between" gap={1.4}>
+                        <Stack direction="row" spacing={1.15} minWidth={0}>
+                          <Box
                             sx={{
-                              height: "21px",
-                              borderRadius: "999px",
-                              color: "#7dd3fc",
-                              backgroundColor: "rgba(56,189,248,.1)",
-                              fontSize: "0.68rem",
-                              fontWeight: 700,
+                              width: 54,
+                              height: 70,
+                              flex: "0 0 auto",
+                              borderRadius: "22px",
+                              display: "grid",
+                              placeItems: "center",
+                              background:
+                                "radial-gradient(circle at 35% 25%, rgba(255,255,255,.28), rgba(56,189,248,.14) 52%, rgba(255,255,255,.05))",
+                              border: "1px solid rgba(255,255,255,.1)",
+                              fontSize: "1.75rem",
                             }}
-                          />
-                          <Typography sx={{ color: "rgba(255,255,255,.42)", fontSize: "0.72rem" }}>
-                            {post.time}
+                          >
+                            {snapType.icon}
+                          </Box>
+                          <Box minWidth={0}>
+                            <Stack direction="row" spacing={0.7} alignItems="center" sx={{ mb: 0.55 }}>
+                              <Chip
+                                label={getCategoryLabel(post.category)}
+                                size="small"
+                                sx={{
+                                  height: "21px",
+                                  borderRadius: "999px",
+                                  color: "#7dd3fc",
+                                  backgroundColor: "rgba(56,189,248,.1)",
+                                  fontSize: "0.68rem",
+                                  fontWeight: 700,
+                                }}
+                              />
+                              <Typography sx={{ color: "rgba(255,255,255,.42)", fontSize: "0.72rem" }}>
+                                {post.time}
+                              </Typography>
+                            </Stack>
+                            <Typography sx={{ color: "white", fontWeight: 800, fontSize: "0.96rem", lineHeight: 1.2 }}>
+                              {post.title}
+                            </Typography>
+                            <Typography sx={{ color: "rgba(255,255,255,.66)", fontSize: "0.82rem", mt: 0.45, lineHeight: 1.45 }}>
+                              {post.body}
+                            </Typography>
+                            <Typography noWrap sx={{ color: "rgba(255,255,255,.42)", fontSize: "0.72rem", mt: 0.75 }}>
+                              {post.displayName} · {post.location}
+                            </Typography>
+                          </Box>
+                        </Stack>
+                        <Stack alignItems="center" justifyContent="center" spacing={0.45} sx={{ flex: "0 0 auto" }}>
+                          <Button
+                            size="small"
+                            onClick={() => handleVote(post.id, 1)}
+                            sx={{
+                              minWidth: 0,
+                              width: 36,
+                              height: 36,
+                              borderRadius: "999px",
+                              color: "#06111f",
+                              backgroundColor: "#7dd3fc",
+                              fontWeight: 900,
+                              "&:hover": { backgroundColor: "#bae6fd" },
+                            }}
+                          >
+                            👍
+                          </Button>
+                          <Typography sx={{ color: "white", fontWeight: 900, fontSize: "0.82rem" }}>
+                            {post.score}
                           </Typography>
                         </Stack>
-                        <Typography sx={{ color: "white", fontWeight: 800, fontSize: "0.94rem", lineHeight: 1.25 }}>
-                          {post.title}
-                        </Typography>
-                        <Typography sx={{ color: "rgba(255,255,255,.66)", fontSize: "0.82rem", mt: 0.45, lineHeight: 1.45 }}>
-                          {post.body}
-                        </Typography>
-                        <Typography noWrap sx={{ color: "rgba(255,255,255,.42)", fontSize: "0.72rem", mt: 0.8 }}>
-                          {post.displayName} · {post.location}
-                        </Typography>
-                      </Box>
-                      <Stack
-                        alignItems="center"
-                        justifyContent="center"
-                        sx={{
-                          flex: "0 0 38px",
-                          borderRadius: "14px",
-                          backgroundColor: "rgba(255,255,255,.045)",
-                          border: "1px solid rgba(255,255,255,.07)",
-                        }}
-                      >
-                        <Button
-                          size="small"
-                          onClick={() => handleVote(post.id, 1)}
-                          sx={{ minWidth: 28, color: "#7dd3fc", py: 0, lineHeight: 1 }}
-                        >
-                          ▲
-                        </Button>
-                        <Typography sx={{ color: "white", fontWeight: 900, fontSize: "0.86rem" }}>
-                          {post.score}
-                        </Typography>
-                        <Button
-                          size="small"
-                          onClick={() => handleVote(post.id, -1)}
-                          sx={{ minWidth: 28, color: "rgba(255,255,255,.48)", py: 0, lineHeight: 1 }}
-                        >
-                          ▼
-                        </Button>
                       </Stack>
-                    </Stack>
-                  </Box>
-                ))}
+                    </Box>
+                  );
+                })}
               </Stack>
             </Grid>
           </Grid>
