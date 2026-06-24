@@ -18,6 +18,62 @@ import {
   getWeekForecastWeather,
 } from "./utilities/DataUtils";
 
+function formatAccuracySuffix(accuracy) {
+  if (!Number.isFinite(accuracy)) return "";
+  return accuracy < 1000
+    ? ` (ca. ${Math.round(accuracy)} m)`
+    : ` (ca. ${(accuracy / 1000).toFixed(1).replace(".", ",")} km)`;
+}
+
+function requestBestPosition({
+  targetAccuracy = 35,
+  settleMs = 6500,
+  timeout = 12000,
+} = {}) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("unsupported"));
+      return;
+    }
+
+    let bestPosition = null;
+    let settled = false;
+    let watchId = 0;
+
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      window.clearTimeout(settleId);
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+      callback(value);
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      if (bestPosition) finish(resolve, bestPosition);
+      else finish(reject, new Error("timeout"));
+    }, timeout);
+
+    const settleId = window.setTimeout(() => {
+      if (bestPosition) finish(resolve, bestPosition);
+    }, settleMs);
+
+    watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        if (!bestPosition || position.coords.accuracy < bestPosition.coords.accuracy) {
+          bestPosition = position;
+        }
+        if (position.coords.accuracy <= targetAccuracy) finish(resolve, position);
+      },
+      (error) => {
+        if (bestPosition) finish(resolve, bestPosition);
+        else finish(reject, error);
+      },
+      { enableHighAccuracy: true, timeout, maximumAge: 0 }
+    );
+  });
+}
+
 function App() {
   const [todayWeather, setTodayWeather] = useState(null);
   const [todayForecast, setTodayForecast] = useState([]);
@@ -73,39 +129,38 @@ function App() {
     if (showLoading) setIsLoading(false);
   };
 
-  const usePositionHandler = () => {
+  const usePositionHandler = async () => {
     if (!navigator.geolocation) {
       setLocationStatus("Nettleseren støtter ikke posisjon.");
       return;
     }
 
-    setLocationStatus("Finner posisjonen din...");
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords }) => {
-        const latitude = coords.latitude.toFixed(4);
-        const longitude = coords.longitude.toFixed(4);
-        const label = await reverseGeocode(latitude, longitude).catch(
-          () => "Din posisjon"
-        );
+    setLocationStatus("Finner posisjonen din mer nøyaktig...");
+    try {
+      const position = await requestBestPosition({
+        targetAccuracy: 25,
+        settleMs: 7500,
+        timeout: 14000,
+      });
+      const latitude = position.coords.latitude.toFixed(7);
+      const longitude = position.coords.longitude.toFixed(7);
+      const label = await reverseGeocode(latitude, longitude).catch(
+        () => "Din posisjon"
+      );
 
-        await searchChangeHandler(
-          {
-            value: `${latitude} ${longitude}`,
-            label,
-          },
-          true
-        );
-        setLocationStatus(`Viser vær for ${label}.`);
-      },
-      () => {
-        setLocationStatus("Fikk ikke tilgang til posisjon. Søk etter sted i stedet.");
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000,
-      }
-    );
+      await searchChangeHandler(
+        {
+          value: `${latitude} ${longitude}`,
+          label,
+        },
+        true
+      );
+      setLocationStatus(
+        `Viser vær for ${label}${formatAccuracySuffix(position.coords.accuracy)}.`
+      );
+    } catch (error) {
+      setLocationStatus("Fikk ikke tilgang til posisjon. Søk etter sted i stedet.");
+    }
   };
 
   useEffect(() => {

@@ -6,6 +6,7 @@ import Layout from '../../Reusable/Layout';
 const TodayWeatherAirConditions = ({ data }) => {
   const noDataProvided =
     !data || Object.keys(data).length === 0 || data.cod === '404';
+  const uvIndex = Number(data?.main?.uvIndex);
 
   let content = <ErrorBox flex="1" type="error" />;
 
@@ -23,9 +24,9 @@ const TodayWeatherAirConditions = ({ data }) => {
           type="wind"
         />
         <AirConditionsItem
-          title="Skydekke"
-          value={`${Math.round(data.clouds.all)} %`}
-          type="clouds"
+          title="UV-indeks"
+          value={Number.isFinite(uvIndex) ? uvIndex.toFixed(1).replace('.', ',') : '--'}
+          type="uv"
         />
         <AirConditionsItem
           title="Fuktighet"

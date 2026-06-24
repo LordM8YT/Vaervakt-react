@@ -3,6 +3,7 @@ import React from 'react';
 import ThermostatIcon from '@mui/icons-material/Thermostat';
 import AirIcon from '@mui/icons-material/Air';
 import FilterDramaIcon from '@mui/icons-material/FilterDrama';
+import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import { ReactComponent as HumidityIcon } from '../../../assets/humidity.svg';
 
 const AirConditionsItem = (props) => {
@@ -14,6 +15,8 @@ const AirConditionsItem = (props) => {
     iconContent = <AirIcon sx={{ fontSize: '18px' }} />;
   else if (props.type === 'clouds')
     iconContent = <FilterDramaIcon sx={{ fontSize: '18px' }} />;
+  else if (props.type === 'uv')
+    iconContent = <WbSunnyIcon sx={{ fontSize: '18px' }} />;
   else if (props.type === 'humidity')
     iconContent = (
       <SvgIcon

@@ -55,6 +55,7 @@ function toOpenWeatherLikePoint(point) {
       temp: details.air_temperature,
       feels_like: details.air_temperature,
       humidity: details.relative_humidity ?? 0,
+      uvIndex: details.ultraviolet_index_clear_sky ?? null,
     },
     weather: [
       {
