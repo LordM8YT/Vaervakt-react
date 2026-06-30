@@ -35,13 +35,6 @@ function getTabFromPath(pathname = window.location.pathname) {
   return APP_TABS.find((tab) => tab.path === normalizedPath)?.value || "weather";
 }
 
-function formatAccuracySuffix(accuracy) {
-  if (!Number.isFinite(accuracy)) return "";
-  return accuracy < 1000
-    ? ` (ca. ${Math.round(accuracy)} m)`
-    : ` (ca. ${(accuracy / 1000).toFixed(1).replace(".", ",")} km)`;
-}
-
 function requestBestPosition({
   targetAccuracy = 35,
   settleMs = 6500,
@@ -104,6 +97,7 @@ function App() {
   const [todayForecast, setTodayForecast] = useState([]);
   const [weekForecast, setWeekForecast] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
   const [error, setError] = useState(false);
   const [locationStatus, setLocationStatus] = useState("");
   const [selectedLocation, setSelectedLocation] = useState({
@@ -167,12 +161,15 @@ function App() {
   };
 
   const usePositionHandler = async () => {
+    if (isLocating) return;
+
     if (!navigator.geolocation) {
       setLocationStatus("Nettleseren støtter ikke posisjon.");
       return;
     }
 
-    setLocationStatus("Finner posisjonen din mer nøyaktig...");
+    setIsLocating(true);
+    setLocationStatus("");
     try {
       const position = await requestBestPosition({
         targetAccuracy: 25,
@@ -192,11 +189,11 @@ function App() {
         },
         true
       );
-      setLocationStatus(
-        `Viser vær for ${label}${formatAccuracySuffix(position.coords.accuracy)}.`
-      );
+      setLocationStatus("");
     } catch (error) {
       setLocationStatus("Fikk ikke tilgang til posisjon. Søk etter sted i stedet.");
+    } finally {
+      setIsLocating(false);
     }
   };
 
@@ -395,6 +392,7 @@ function App() {
             <Box display="flex" alignItems="center" justifyContent="flex-end" gap="0.7rem">
               <Button
                 onClick={usePositionHandler}
+                disabled={isLocating}
                 size="small"
                 sx={{
                   color: "#e2e8f0",
@@ -404,9 +402,10 @@ function App() {
                   fontSize: { xs: "0.68rem", sm: "0.78rem" },
                   textTransform: "none",
                   whiteSpace: "nowrap",
+                  opacity: isLocating ? 0.72 : 1,
                 }}
               >
-                Bruk posisjon
+                {isLocating ? "Finner..." : "Bruk posisjon"}
               </Button>
               <UTCDatetime />
               <Link
@@ -427,16 +426,34 @@ function App() {
           </Box>
           <Search onSearchChange={searchChangeHandler} />
           {locationStatus && (
-            <Typography
+            <Box
+              role="status"
               sx={{
-                color: "#94a3b8",
-                fontSize: "0.82rem",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 0.8,
                 mt: 1,
-                textAlign: "center",
+                mx: "auto",
+                width: "fit-content",
+                maxWidth: "100%",
+                px: 1.25,
+                py: 0.8,
+                borderRadius: "999px",
+                border: "1px solid rgba(251, 191, 36, .24)",
+                background: "rgba(251, 191, 36, .1)",
+                color: "#fde68a",
+                fontSize: "0.78rem",
+                fontWeight: 700,
               }}
             >
-              {locationStatus}
-            </Typography>
+              <Box component="span" aria-hidden="true">
+                !
+              </Box>
+              <Typography component="span" sx={{ fontSize: "inherit", fontWeight: "inherit" }}>
+                {locationStatus}
+              </Typography>
+            </Box>
           )}
         </Grid>
         {appContent}
