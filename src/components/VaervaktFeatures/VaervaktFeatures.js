@@ -511,7 +511,7 @@ function SnapTypeButton({ type, selected, onClick }) {
   );
 }
 
-function VaervaktFeatures({ selectedLocation, weather }) {
+function VaervaktFeatures({ selectedLocation, weather, activeTab = "local" }) {
   const [reports, setReports] = useState([]);
   const [posts, setPosts] = useState([]);
   const [photos, setPhotos] = useState([]);
@@ -843,16 +843,17 @@ function VaervaktFeatures({ selectedLocation, weather }) {
           </Alert>
         )}
 
-        <Box sx={sectionSx}>
-          <SectionHeading
-            title="Lokalt fra Værvakt"
-            subtitle={`Rapporter og observasjoner nær ${location.name}.`}
-            action={
-              <WeatherPillButton onClick={refreshCommunityData} disabled={isLoading}>
-                Oppdater
-              </WeatherPillButton>
-            }
-          />
+        {activeTab === "local" && (
+          <Box sx={sectionSx}>
+            <SectionHeading
+              title="Lokalt fra Værvakt"
+              subtitle={`Rapporter og observasjoner nær ${location.name}.`}
+              action={
+                <WeatherPillButton onClick={refreshCommunityData} disabled={isLoading}>
+                  Oppdater
+                </WeatherPillButton>
+              }
+            />
 
           <Grid
             container
@@ -1000,24 +1001,27 @@ function VaervaktFeatures({ selectedLocation, weather }) {
               </Stack>
             </Grid>
           </Grid>
-        </Box>
+          </Box>
+        )}
 
-        <Box sx={sectionSx}>
-          <SectionHeading
-            title="Badetemperatur"
-            subtitle="Send ferske målinger videre til Yr fra riktig badeplass."
-          />
-          <Stack
-            component="form"
-            spacing={1.25}
-            onSubmit={handleBathSubmit}
-            sx={{
-              ...cardSx,
-              p: { xs: 1.4, sm: 1.6 },
-              background:
-                "linear-gradient(135deg, rgba(14,165,233,.15), rgba(6,182,212,.08) 52%, rgba(9,16,36,.84))",
-            }}
-          >
+        {activeTab === "bath" && (
+          <>
+            <Box sx={sectionSx}>
+              <SectionHeading
+                title="Badetemperatur"
+                subtitle="Send ferske målinger videre til Yr fra riktig badeplass."
+              />
+              <Stack
+                component="form"
+                spacing={1.25}
+                onSubmit={handleBathSubmit}
+                sx={{
+                  ...cardSx,
+                  p: { xs: 1.4, sm: 1.6 },
+                  background:
+                    "linear-gradient(135deg, rgba(14,165,233,.15), rgba(6,182,212,.08) 52%, rgba(9,16,36,.84))",
+                }}
+              >
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
               <TextField
                 label="Badeplass"
@@ -1111,71 +1115,74 @@ function VaervaktFeatures({ selectedLocation, weather }) {
             >
               {isBathSubmitting ? "Sender til Yr..." : "Send badetemperatur til Yr"}
             </Button>
-          </Stack>
-        </Box>
-
-        <Box
-          sx={{
-            ...cardSx,
-            p: { xs: 1.4, sm: 1.6 },
-            borderRadius: { xs: "18px", sm: "22px" },
-            background:
-              "linear-gradient(135deg, rgba(255,91,36,.17), rgba(255,45,85,.08) 48%, rgba(9,16,36,.82))",
-          }}
-        >
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            alignItems={{ xs: "stretch", sm: "center" }}
-            justifyContent="space-between"
-            gap={1.4}
-          >
-            <Box>
-              <Typography sx={{ color: "white", fontWeight: 800, fontSize: "0.98rem" }}>
-                Hold Værvakt annonsefri
-              </Typography>
-              <Typography sx={{ color: "rgba(255,255,255,.52)", fontSize: "0.78rem", mt: 0.3 }}>
-                Vipps-støtte går til drift, API-er og videre utvikling.
-              </Typography>
+              </Stack>
             </Box>
-            <Button
-              component="a"
-              href={VIPPS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+
+            <Box
               sx={{
-                borderRadius: "14px",
-                px: 2.2,
-                py: 1,
-                color: "#fff",
-                fontWeight: 900,
-                background: "linear-gradient(135deg, #ff7a3d, #ff2d55)",
-                textTransform: "none",
-                whiteSpace: "nowrap",
-                "&:hover": {
-                  background: "linear-gradient(135deg, #ff8f5c, #ff4770)",
-                },
+                ...cardSx,
+                p: { xs: 1.4, sm: 1.6 },
+                borderRadius: { xs: "18px", sm: "22px" },
+                background:
+                  "linear-gradient(135deg, rgba(255,91,36,.17), rgba(255,45,85,.08) 48%, rgba(9,16,36,.82))",
               }}
             >
-              Støtt med Vipps
-            </Button>
-          </Stack>
-        </Box>
-
-        <Box sx={sectionSx}>
-          <SectionHeading
-            title="Værglimt"
-            subtitle="Korte lokale værtegn, litt mer Snap enn forum."
-            action={
-              <Stack direction="row" spacing={0.75}>
-                <WeatherPillButton selected={sort === "new"} onClick={() => setSort("new")}>
-                  Fersk
-                </WeatherPillButton>
-                <WeatherPillButton selected={sort === "top"} onClick={() => setSort("top")}>
-                  Nyttig
-                </WeatherPillButton>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                alignItems={{ xs: "stretch", sm: "center" }}
+                justifyContent="space-between"
+                gap={1.4}
+              >
+                <Box>
+                  <Typography sx={{ color: "white", fontWeight: 800, fontSize: "0.98rem" }}>
+                    Hold Værvakt annonsefri
+                  </Typography>
+                  <Typography sx={{ color: "rgba(255,255,255,.52)", fontSize: "0.78rem", mt: 0.3 }}>
+                    Vipps-støtte går til drift, API-er og videre utvikling.
+                  </Typography>
+                </Box>
+                <Button
+                  component="a"
+                  href={VIPPS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{
+                    borderRadius: "14px",
+                    px: 2.2,
+                    py: 1,
+                    color: "#fff",
+                    fontWeight: 900,
+                    background: "linear-gradient(135deg, #ff7a3d, #ff2d55)",
+                    textTransform: "none",
+                    whiteSpace: "nowrap",
+                    "&:hover": {
+                      background: "linear-gradient(135deg, #ff8f5c, #ff4770)",
+                    },
+                  }}
+                >
+                  Støtt med Vipps
+                </Button>
               </Stack>
-            }
-          />
+            </Box>
+          </>
+        )}
+
+        {activeTab === "glimpse" && (
+          <Box sx={sectionSx}>
+            <SectionHeading
+              title="Værglimt"
+              subtitle="Korte lokale værtegn, litt mer Snap enn forum."
+              action={
+                <Stack direction="row" spacing={0.75}>
+                  <WeatherPillButton selected={sort === "new"} onClick={() => setSort("new")}>
+                    Fersk
+                  </WeatherPillButton>
+                  <WeatherPillButton selected={sort === "top"} onClick={() => setSort("top")}>
+                    Nyttig
+                  </WeatherPillButton>
+                </Stack>
+              }
+            />
 
           <Grid
             container
@@ -1617,7 +1624,8 @@ function VaervaktFeatures({ selectedLocation, weather }) {
               </Stack>
             </Grid>
           </Grid>
-        </Box>
+          </Box>
+        )}
       </Stack>
     </Grid>
   );

@@ -18,6 +18,18 @@ import {
   getWeekForecastWeather,
 } from "./utilities/DataUtils";
 
+const APP_TABS = [
+  { value: "weather", label: "Vær", icon: "☁️", path: "/" },
+  { value: "local", label: "Lokalt", icon: "📍", path: "/lokalt/" },
+  { value: "bath", label: "Bad", icon: "🌊", path: "/bad/" },
+  { value: "glimpse", label: "Glimt", icon: "⚡", path: "/glimt/" },
+];
+
+function getTabFromPath(pathname = window.location.pathname) {
+  const normalizedPath = pathname.endsWith("/") ? pathname : `${pathname}/`;
+  return APP_TABS.find((tab) => tab.path === normalizedPath)?.value || "weather";
+}
+
 function formatAccuracySuffix(accuracy) {
   if (!Number.isFinite(accuracy)) return "";
   return accuracy < 1000
@@ -75,6 +87,7 @@ function requestBestPosition({
 }
 
 function App() {
+  const [activeTab, setActiveTab] = useState(() => getTabFromPath());
   const [todayWeather, setTodayWeather] = useState(null);
   const [todayForecast, setTodayForecast] = useState([]);
   const [weekForecast, setWeekForecast] = useState(null);
@@ -129,6 +142,18 @@ function App() {
     if (showLoading) setIsLoading(false);
   };
 
+  const changeTab = (tabValue) => {
+    const tab = APP_TABS.find((item) => item.value === tabValue);
+    if (!tab) return;
+
+    window.navigator.vibrate?.(8);
+    setActiveTab(tab.value);
+    if (window.location.pathname !== tab.path) {
+      window.history.pushState({ tab: tab.value }, "", tab.path);
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const usePositionHandler = async () => {
     if (!navigator.geolocation) {
       setLocationStatus("Nettleseren støtter ikke posisjon.");
@@ -174,6 +199,12 @@ function App() {
     );
   }, []);
 
+  useEffect(() => {
+    const handlePopState = () => setActiveTab(getTabFromPath());
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   let appContent = (
     <Box
       xs={12}
@@ -213,15 +244,44 @@ function App() {
   if (todayWeather && todayForecast && weekForecast) {
     appContent = (
       <React.Fragment>
-        <Grid item xs={12} md={todayWeather ? 6 : 12}>
+        {activeTab === "weather" && (
+          <>
+            <Grid item xs={12} md={todayWeather ? 6 : 12}>
+              <Grid item xs={12}>
+                <TodayWeather data={todayWeather} forecastList={todayForecast} />
+              </Grid>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <WeeklyForecast data={weekForecast} />
+            </Grid>
+          </>
+        )}
+        {activeTab !== "weather" && (
+          <VaervaktFeatures
+            selectedLocation={selectedLocation}
+            weather={todayWeather}
+            activeTab={activeTab}
+          />
+        )}
+        {activeTab === "weather" && (
           <Grid item xs={12}>
-            <TodayWeather data={todayWeather} forecastList={todayForecast} />
+            <Box
+              sx={{
+                mt: { xs: 1.5, md: 2 },
+                mb: { xs: 8, md: 3 },
+                border: "1px solid rgba(148, 163, 184, .18)",
+                borderRadius: "22px",
+                background: "rgba(15, 23, 42, .62)",
+                color: "rgba(226,232,240,.72)",
+                px: { xs: 1.4, sm: 1.8 },
+                py: 1.3,
+                fontSize: "0.82rem",
+              }}
+            >
+              Bytt fane nederst for lokale rapporter, badetemperatur og Værglimt.
+            </Box>
           </Grid>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <WeeklyForecast data={weekForecast} />
-        </Grid>
-        <VaervaktFeatures selectedLocation={selectedLocation} weather={todayWeather} />
+        )}
       </React.Fragment>
     );
   }
@@ -277,7 +337,7 @@ function App() {
         overflowX: "clip",
         px: { xs: "12px", sm: 0 },
         paddingTop: "1rem",
-        paddingBottom: "3rem",
+        paddingBottom: "calc(6.5rem + env(safe-area-inset-bottom))",
         marginBottom: "1rem",
         borderRadius: {
           xs: "none",
@@ -369,6 +429,67 @@ function App() {
         </Grid>
         {appContent}
       </Grid>
+      <Box
+        component="nav"
+        aria-label="Hovedmeny"
+        sx={{
+          position: "fixed",
+          left: "50%",
+          bottom: "calc(12px + env(safe-area-inset-bottom))",
+          transform: "translateX(-50%)",
+          zIndex: 30,
+          width: "min(520px, calc(100vw - 24px))",
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gap: "6px",
+          p: "7px",
+          borderRadius: "999px",
+          border: "1px solid rgba(148, 163, 184, .22)",
+          background: "rgba(2, 6, 23, .86)",
+          backdropFilter: "blur(22px)",
+          boxShadow: "0 18px 44px rgba(2, 6, 23, .45)",
+        }}
+      >
+        {APP_TABS.map((tab) => {
+          const isActive = activeTab === tab.value;
+
+          return (
+            <Button
+              key={tab.value}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => changeTab(tab.value)}
+              sx={{
+                minWidth: 0,
+                borderRadius: "999px",
+                px: { xs: 0.6, sm: 1 },
+                py: 0.95,
+                color: isActive ? "#06111f" : "rgba(226,232,240,.74)",
+                background: isActive
+                  ? "linear-gradient(135deg, #7dd3fc, #38bdf8)"
+                  : "rgba(255,255,255,.04)",
+                border: "1px solid",
+                borderColor: isActive ? "rgba(125, 211, 252, .75)" : "rgba(255,255,255,.05)",
+                fontWeight: 900,
+                fontSize: { xs: "0.72rem", sm: "0.82rem" },
+                lineHeight: 1,
+                textTransform: "none",
+                gap: { xs: 0.35, sm: 0.55 },
+                "&:hover": {
+                  background: isActive
+                    ? "linear-gradient(135deg, #bae6fd, #38bdf8)"
+                    : "rgba(255,255,255,.08)",
+                },
+              }}
+            >
+              <Box component="span" aria-hidden="true" sx={{ fontSize: { xs: "0.9rem", sm: "1rem" } }}>
+                {tab.icon}
+              </Box>
+              {tab.label}
+            </Button>
+          );
+        })}
+      </Box>
     </Container>
   );
 }
