@@ -1,7 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
   <rect width="144" height="144" rx="26" fill="#020617"/>
-  <circle cx="108" cy="34" r="38" fill="#38bdf8" opacity=".24"/>
-  <text x="17" y="30" fill="#7dd3fc" font-family="Arial, sans-serif" font-size="13" font-weight="900">VÆRVAKT</text>
-  <text x="16" y="84" fill="#fff" font-family="Arial, sans-serif" font-size="52" font-weight="900">--°</text>
-  <text x="17" y="114" fill="#94a3b8" font-family="Arial, sans-serif" font-size="14" font-weight="900">Laster...</text>
+  <circle cx="108" cy="104" r="38" fill="#38bdf8" opacity=".22"/>
+  <path d="M0 0h22L0 22Z" fill="#38bdf8" opacity=".72"/>
+  <path d="M144 144h-22l22-22Z" fill="#2563eb" opacity=".72"/>
+  <text x="11" y="56" fill="#fff" font-family="Arial, sans-serif" font-size="60" font-weight="900">--°</text>
+  <text x="13" y="86" fill="#e2e8f0" font-family="Arial, sans-serif" font-size="15" font-weight="900">KRISTIANSAND</text>
+  <text x="13" y="105" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="10.5" font-weight="800">VÆRVAKT</text>
+  <text x="110" y="116" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif" font-size="42">☁️</text>
 </svg>

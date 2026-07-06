@@ -30,27 +30,32 @@ function truncate(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
 }
 
+function compactLabel(value: string, maxLength: number): string {
+  return truncate(value, maxLength).toUpperCase();
+}
+
 export function makeKeyImage(input: WeatherImageInput): string {
-  const place = escapeXml(truncate(input.placeName || "Værvakt", 16));
-  const condition = escapeXml(truncate(input.condition || "Lokalt vær", 18));
+  const place = escapeXml(compactLabel(input.placeName || "Værvakt", 13));
+  const condition = escapeXml(compactLabel(input.condition || "Lokalt vær", 13));
   const icon = escapeXml(input.icon || (input.mode === "bath" ? "🌊" : "☁️"));
   const temp = escapeXml(formatTemperature(input.temperature));
   const bathTemp = escapeXml(formatTemperature(input.bathTemperature));
-  const bathPlace = escapeXml(truncate(input.bathPlace || "Badetemp", 16));
+  const bathPlace = escapeXml(compactLabel(input.bathPlace || "Badetemp", 13));
   const status = input.status || "ok";
-  const message = escapeXml(truncate(input.message || "Sjekker Værvakt", 18));
+  const message = escapeXml(compactLabel(input.message || "Sjekker Værvakt", 13));
   const isBath = input.mode === "bath";
 
   const centerText = status === "error" ? "!" : isBath ? bathTemp : temp;
-  const bottomPrimary = status === "error" ? "Feil" : isBath ? bathPlace : place;
+  const bottomPrimary = status === "error" ? "FEIL" : isBath ? bathPlace : place;
   const bottomSecondary =
     status === "error"
       ? message
       : isBath
-        ? "Badetemp fra Yr"
+        ? "BADETEMP FRA YR"
         : input.bathTemperature
           ? `Bad ${bathTemp}`
           : condition;
+  const temperatureSize = centerText.length > 3 ? 48 : 60;
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
@@ -67,12 +72,12 @@ export function makeKeyImage(input: WeatherImageInput): string {
   </defs>
   <rect width="144" height="144" rx="26" fill="url(#bg)"/>
   <rect width="144" height="144" rx="26" fill="url(#glow)"/>
-  <rect x="8" y="8" width="128" height="128" rx="22" fill="rgba(255,255,255,0.04)" stroke="rgba(186,230,253,0.22)" stroke-width="1"/>
-  <text x="17" y="28" fill="#7dd3fc" font-family="Arial, sans-serif" font-size="12" font-weight="900" letter-spacing="1">VÆRVAKT</text>
-  <text x="113" y="45" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif" font-size="34">${icon}</text>
-  <text x="16" y="82" fill="#ffffff" font-family="Arial, sans-serif" font-size="${centerText.length > 3 ? 40 : 50}" font-weight="900">${centerText}</text>
-  <text x="17" y="108" fill="#e2e8f0" font-family="Arial, sans-serif" font-size="14" font-weight="900">${bottomPrimary}</text>
-  <text x="17" y="124" fill="#94a3b8" font-family="Arial, sans-serif" font-size="11" font-weight="800">${escapeXml(bottomSecondary)}</text>
+  <path d="M0 0h22L0 22Z" fill="#38bdf8" opacity=".72"/>
+  <path d="M144 144h-22l22-22Z" fill="#2563eb" opacity=".72"/>
+  <text x="11" y="56" fill="#ffffff" font-family="Arial, sans-serif" font-size="${temperatureSize}" font-weight="900">${centerText}</text>
+  <text x="13" y="86" fill="#e2e8f0" font-family="Arial, sans-serif" font-size="15" font-weight="900">${bottomPrimary}</text>
+  <text x="13" y="105" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="10.5" font-weight="800">${escapeXml(bottomSecondary)}</text>
+  <text x="110" y="116" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif" font-size="42">${icon}</text>
 </svg>`;
 
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
