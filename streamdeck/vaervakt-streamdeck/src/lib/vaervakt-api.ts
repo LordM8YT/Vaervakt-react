@@ -11,6 +11,7 @@ export type VaervaktWeather = {
     waterTemperature?: number | null;
     waterTemperatureLocation?: string | null;
     waterTemperatureDistanceKm?: number | null;
+    waterTemperatureTime?: string | null;
     nearby?: Array<{
       name: string;
       municipality?: string;

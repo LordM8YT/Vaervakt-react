@@ -2,7 +2,7 @@
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "UUID": "no.vaervakt.streamdeck",
   "Name": "Værvakt",
-  "Version": "0.1.1.0",
+  "Version": "0.1.2.0",
   "Author": "Værvakt.no",
   "Description": "Viser lokalt vær og badetemperaturer fra Værvakt.no på Stream Deck.",
   "Icon": "static/imgs/plugin/marketplace",
@@ -60,6 +60,24 @@
       "States": [
         {
           "Image": "static/imgs/actions/bath/key",
+          "ShowTitle": false,
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "Badetemp info",
+      "UUID": "no.vaervakt.streamdeck.bath-info",
+      "Icon": "static/imgs/actions/bath-info/icon",
+      "Tooltip": "Viser badeplass, avstand og tidspunkt for nærmeste badetemperatur.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "PropertyInspectorPath": "ui/vaervakt.html",
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "static/imgs/actions/bath-info/key",
           "ShowTitle": false,
           "TitleAlignment": "bottom"
         }

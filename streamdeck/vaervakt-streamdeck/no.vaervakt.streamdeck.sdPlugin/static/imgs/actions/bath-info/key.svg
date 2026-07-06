@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <defs>
+    <linearGradient id="bg" x1="12" y1="0" x2="132" y2="144" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#12305f"/>
+      <stop offset="0.52" stop-color="#061328"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+  </defs>
+  <rect width="144" height="144" rx="26" fill="url(#bg)"/>
+  <circle cx="108" cy="104" r="38" fill="#38bdf8" opacity=".18"/>
+  <path d="M0 0h22L0 22Z" fill="#38bdf8" opacity=".72"/>
+  <path d="M144 144h-22l22-22Z" fill="#2563eb" opacity=".72"/>
+  <text x="13" y="33" fill="#7dd3fc" font-family="Arial, sans-serif" font-size="12" font-weight="900">BADESTED</text>
+  <text x="13" y="65" fill="#ffffff" font-family="Arial, sans-serif" font-size="20" font-weight="900">LASTER</text>
+  <text x="13" y="91" fill="#e2e8f0" font-family="Arial, sans-serif" font-size="14" font-weight="900">BADETEMP INFO</text>
+  <text x="13" y="111" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="10.5" font-weight="800">YR</text>
+  <text x="111" y="119" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif" font-size="40">🌊</text>
+</svg>

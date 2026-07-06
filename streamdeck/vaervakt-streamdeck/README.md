@@ -6,6 +6,7 @@ En liten Stream Deck-plugin for Værvakt.no.
 
 - `Værvakt Nå`: viser temperatur, værikon, sted og eventuell nærmeste badetemperatur.
 - `Badetemp`: viser nærmeste badetemperatur fra Yr via Værvakt sitt API.
+- `Badetemp info`: viser badeplass, avstand og tidspunkt. Plasser den rett ved siden av `Badetemp` for en todelt badetemp-widget.
 - Trykk på knappen åpner Værvakt i nettleseren.
 - Property Inspector lar deg sette sted, koordinater, API-base og oppdateringsintervall.
 

@@ -10,7 +10,7 @@ import { fetchVaervaktWeather } from "../lib/vaervakt-api";
 import { makeKeyImage } from "../lib/key-image";
 import { normalizeSettings, type VaervaktSettings } from "../settings";
 
-type VaervaktMode = "weather" | "bath";
+type VaervaktMode = "weather" | "bath" | "bathInfo";
 
 export abstract class BaseVaervaktAction extends SingletonAction<VaervaktSettings> {
   private timers = new Map<string, NodeJS.Timeout>();
@@ -38,7 +38,7 @@ export abstract class BaseVaervaktAction extends SingletonAction<VaervaktSetting
     await this.refresh(ev.action, ev.payload.settings);
 
     if (settings.openOnPress) {
-      const path = this.mode === "bath" ? "/bad/" : "/";
+      const path = this.mode === "weather" ? "/" : "/bad/";
       await streamDeck.system.openUrl(`${settings.apiBase}${path}`);
     }
   }
@@ -87,6 +87,8 @@ export abstract class BaseVaervaktAction extends SingletonAction<VaervaktSetting
           icon: data.current.icon,
           bathTemperature: nearestBath?.temperature ?? data.bathing?.waterTemperature,
           bathPlace: nearestBath?.name ?? data.bathing?.waterTemperatureLocation,
+          bathDistanceKm: nearestBath?.distanceKm ?? data.bathing?.waterTemperatureDistanceKm,
+          bathTime: nearestBath?.time ?? data.bathing?.waterTemperatureTime,
           status: "ok",
         }),
       );
