@@ -168,6 +168,7 @@
 
     <div class="actions">
       <button type="button" class="secondary" id="usePosition">Bruk posisjon</button>
+      <button type="button" class="secondary" id="findPlace">Finn sted fra navn</button>
       <div class="status" id="positionStatus"></div>
     </div>
 
@@ -243,6 +244,7 @@
     const positionStatus = document.getElementById("positionStatus");
     const bathStatus = document.getElementById("bathStatus");
     const usePositionButton = document.getElementById("usePosition");
+    const findPlaceButton = document.getElementById("findPlace");
     const loadBathPlacesButton = document.getElementById("loadBathPlaces");
     const fields = {
       apiBase: document.getElementById("apiBase"),
@@ -378,6 +380,44 @@
       setStatus(bathStatus, `Fant ${places.length} badeplasser nær stedet.`, "ok");
     }
 
+    async function applyPlace(result, message = "Sted lagret på knappen.") {
+      if (!result || !Number.isFinite(Number(result.lat)) || !Number.isFinite(Number(result.lon))) {
+        throw new Error("Fant ikke gyldige koordinater.");
+      }
+
+      fields.placeName.value = result.name || fields.placeName.value || defaults.placeName;
+      fields.lat.value = Number(result.lat).toFixed(5);
+      fields.lon.value = Number(result.lon).toFixed(5);
+      fields.bathLocationId.value = "";
+      saveSettings();
+      setStatus(positionStatus, message, "ok");
+      await loadBathPlaces();
+    }
+
+    async function findPlaceFromName(reason = "") {
+      const current = readForm();
+      const query = current.placeName.trim();
+      if (query.length < 2) {
+        throw new Error("Skriv inn et stedsnavn først.");
+      }
+
+      const intro = reason ? `${reason} Prøver stedsnavn...` : "Søker etter stedet...";
+      setStatus(positionStatus, intro);
+      findPlaceButton.disabled = true;
+
+      try {
+        const params = new URLSearchParams({ q: query });
+        const payload = await requestJson(`${current.apiBase}/api/geocode.php?${params.toString()}`);
+        const result = Array.isArray(payload.results) ? payload.results[0] : null;
+        if (!result) {
+          throw new Error(`Fant ikke "${query}".`);
+        }
+        await applyPlace(result, `Bruker ${result.name}.`);
+      } finally {
+        findPlaceButton.disabled = false;
+      }
+    }
+
     function formatDistance(value) {
       const distance = Number(value);
       if (!Number.isFinite(distance)) return "ukjent avstand";
@@ -386,7 +426,11 @@
 
     async function useCurrentPosition() {
       if (!navigator.geolocation) {
-        setStatus(positionStatus, "Denne Stream Deck-visningen støtter ikke GPS.", "error");
+        try {
+          await findPlaceFromName("Stream Deck-panelet støtter ikke GPS.");
+        } catch (error) {
+          setStatus(positionStatus, error?.message || "GPS er ikke tilgjengelig.", "error");
+        }
         return;
       }
 
@@ -410,19 +454,29 @@
         const current = readForm();
         const params = new URLSearchParams({ lat, lon });
         const payload = await requestJson(`${current.apiBase}/api/geocode.php?${params.toString()}`);
-        if (payload.result?.name) {
-          fields.placeName.value = payload.result.name;
-        }
-
-        saveSettings();
-        setStatus(positionStatus, "Posisjon lagret på knappen.", "ok");
-        await loadBathPlaces();
+        await applyPlace({
+          name: payload.result?.name || "Din posisjon",
+          lat,
+          lon
+        }, "Posisjon lagret på knappen.");
       } catch (error) {
-        const message = error?.message || "Kunne ikke hente posisjon.";
-        setStatus(positionStatus, message, "error");
+        try {
+          const reason = readablePositionError(error);
+          await findPlaceFromName(`${reason}`);
+        } catch (fallbackError) {
+          const message = fallbackError?.message || error?.message || "Kunne ikke hente posisjon.";
+          setStatus(positionStatus, message, "error");
+        }
       } finally {
         usePositionButton.disabled = false;
       }
+    }
+
+    function readablePositionError(error) {
+      if (error?.code === 1) return "GPS-tilgang ble nektet.";
+      if (error?.code === 2) return "GPS-posisjon var utilgjengelig.";
+      if (error?.code === 3) return "GPS brukte for lang tid.";
+      return "GPS fungerte ikke.";
     }
 
     form.addEventListener("submit", (event) => {
@@ -436,6 +490,12 @@
 
     usePositionButton.addEventListener("click", () => {
       void useCurrentPosition();
+    });
+
+    findPlaceButton.addEventListener("click", () => {
+      findPlaceFromName().catch((error) => {
+        setStatus(positionStatus, error?.message || "Kunne ikke finne sted.", "error");
+      });
     });
 
     loadBathPlacesButton.addEventListener("click", () => {
