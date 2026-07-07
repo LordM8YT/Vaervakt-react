@@ -2,6 +2,7 @@ let websocket = null;
 let pluginUUID = null;
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const REQUEST_TIMEOUT_MS = 10 * 1000;
 
 const ACTIONS = {
   weather: "no.vaervakt.streamdeck.now",
@@ -269,15 +270,8 @@ async function fetchWeather(settings) {
     lat: String(settings.lat),
     lon: String(settings.lon),
   });
-  const response = await fetch(`${settings.apiBase}/api/weather.php?${params.toString()}`, {
-    headers: { Accept: "application/json" },
-  });
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-
-  const payload = await response.json();
+  const payload = await requestJson(`${settings.apiBase}/api/weather.php?${params.toString()}`);
   if (payload.success === false || !payload.current) {
     throw new Error(payload.message || "Mangler værdata");
   }
@@ -293,15 +287,7 @@ async function fetchLatestReport(settings) {
     radiusKm: "35",
     location: settings.placeName,
   });
-  const response = await fetch(`${settings.apiBase}/api/reports.php?${params.toString()}`, {
-    headers: { Accept: "application/json" },
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-
-  const payload = await response.json();
+  const payload = await requestJson(`${settings.apiBase}/api/reports.php?${params.toString()}`);
   if (payload.success === false) {
     throw new Error(payload.message || "Mangler rapport");
   }
@@ -310,10 +296,9 @@ async function fetchLatestReport(settings) {
 }
 
 async function submitQuickReport(settings, weather) {
-  const response = await fetch(`${settings.apiBase}/api/reports.php`, {
+  const payload = await requestJson(`${settings.apiBase}/api/reports.php`, {
     method: "POST",
     headers: {
-      Accept: "application/json",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -326,16 +311,91 @@ async function submitQuickReport(settings, weather) {
     }),
   });
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-
-  const payload = await response.json();
   if (payload.success === false) {
     throw new Error(payload.message || "Rapport feilet");
   }
 
   return payload;
+}
+
+async function requestJson(url, options = {}) {
+  if (typeof fetch === "function") {
+    return requestJsonWithFetch(url, options);
+  }
+
+  return requestJsonWithXhr(url, options);
+}
+
+async function requestJsonWithFetch(url, options = {}) {
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeout = controller
+    ? setTimeout(() => {
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS)
+    : null;
+
+  try {
+    const response = await fetch(url, {
+      method: options.method || "GET",
+      headers: {
+        Accept: "application/json",
+        ...(options.headers || {}),
+      },
+      body: options.body,
+      signal: controller?.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("Timeout");
+    }
+    throw error;
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+function requestJsonWithXhr(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method || "GET", url, true);
+    xhr.timeout = REQUEST_TIMEOUT_MS;
+    xhr.setRequestHeader("Accept", "application/json");
+
+    Object.entries(options.headers || {}).forEach(([key, value]) => {
+      xhr.setRequestHeader(key, value);
+    });
+
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(`HTTP ${xhr.status}`));
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(xhr.responseText));
+      } catch {
+        reject(new Error("Ugyldig JSON"));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error("Nettverksfeil"));
+    };
+
+    xhr.ontimeout = () => {
+      reject(new Error("Timeout"));
+    };
+
+    xhr.send(options.body || null);
+  });
 }
 
 function setTitle(context, title) {
