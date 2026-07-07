@@ -20,9 +20,18 @@ Anbefalt layout på Stream Deck:
 [Badetemp]  [Badetemp info] [Send rapport]
 ```
 
+## Struktur
+
+Pluginen bruker klassisk Stream Deck JavaScript med `connectElgatoStreamDeckSocket` i:
+
+```text
+no.vaervakt.streamdeck.sdPlugin/plugin.js
+```
+
+Den bruker ikke React, TypeScript eller Elgato Node SDK-runtime.
+
 ## Krav
 
-- Node.js 24 eller nyere.
 - Stream Deck 7.1 eller nyere.
 - Stream Deck CLI hvis du vil pakke pluginen til installasjonsfil.
 
@@ -31,18 +40,13 @@ Anbefalt layout på Stream Deck:
 ```powershell
 npm install
 npm run build
+npm run pack
 ```
 
 Den byggede pluginen ligger i:
 
 ```text
 no.vaervakt.streamdeck.sdPlugin
-```
-
-For å lage installerbar fil:
-
-```powershell
-npm run pack
 ```
 
 ## Standardsted
