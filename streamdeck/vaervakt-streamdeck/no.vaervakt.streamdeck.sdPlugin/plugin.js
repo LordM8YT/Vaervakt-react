@@ -50,7 +50,7 @@ function connectElgatoStreamDeckSocket(port, uuid, registerEvent) {
     if (message.event === "willAppear") {
       const action = message.action || message.payload?.action;
       const settings = normalizeSettings(message.payload?.settings);
-      contexts.set(context, { action, settings });
+      contexts.set(context, { action, settings, requestId: 0, lastGood: null });
       scheduleRefresh(context);
       void refreshContext(context);
       return;
@@ -66,6 +66,8 @@ function connectElgatoStreamDeckSocket(port, uuid, registerEvent) {
       const current = contexts.get(context);
       if (!current) return;
       current.settings = normalizeSettings(message.payload?.settings);
+      current.lastGood = null;
+      current.requestId = (current.requestId || 0) + 1;
       contexts.set(context, current);
       scheduleRefresh(context);
       void refreshContext(context);
@@ -142,6 +144,7 @@ async function refreshContext(context) {
 
   const mode = modeFromAction(state.action);
   const settings = state.settings;
+  const requestId = startRequest(context);
 
   if (mode === "open") {
     setTitle(context, "Åpne");
@@ -162,21 +165,24 @@ async function refreshContext(context) {
     return;
   }
 
-  setTitle(context, "...");
-  setImage(context, makeKeyImage({ mode, placeName: settings.placeName, status: "loading" }));
+  if (!state.lastGood) {
+    setTitle(context, "...");
+    setImage(context, makeKeyImage({ mode, placeName: settings.placeName, status: "loading" }));
+  }
 
   try {
     if (mode === "latest") {
       const latestReport = await fetchLatestReport(settings);
-      setTitle(context, latestReport ? `${latestReport.temp}°` : "Ingen");
-      setImage(
-        context,
-        makeKeyImage({
-          mode,
-          placeName: settings.placeName,
-          latestReport,
-        }),
-      );
+      if (!isCurrentRequest(context, requestId)) return;
+      const title = latestReport ? formatTemperature(latestReport.temp) : "Ingen";
+      const image = makeKeyImage({
+        mode,
+        placeName: settings.placeName,
+        latestReport,
+      });
+      state.lastGood = { title, image };
+      setTitle(context, title);
+      setImage(context, image);
       return;
     }
 
@@ -186,28 +192,26 @@ async function refreshContext(context) {
     const bathPlace = nearestBath?.name ?? weather.bathing?.waterTemperatureLocation;
     const bathDistanceKm = nearestBath?.distanceKm ?? weather.bathing?.waterTemperatureDistanceKm;
     const bathTime = nearestBath?.time ?? weather.bathing?.waterTemperatureTime;
-    const title = mode === "weather"
-      ? `${Math.round(Number(weather.current.temperature))}°`
-      : Number.isFinite(Number(bathTemperature))
-        ? `${Math.round(Number(bathTemperature))}°`
-        : "--";
+    if (!isCurrentRequest(context, requestId)) return;
 
+    const title = mode === "weather" ? formatTemperature(weather.current.temperature) : formatTemperature(bathTemperature);
+    const image = makeKeyImage({
+      mode,
+      placeName: settings.placeName,
+      temperature: weather.current.temperature,
+      condition: weather.current.condition,
+      icon: weather.current.icon,
+      bathTemperature,
+      bathPlace,
+      bathDistanceKm,
+      bathTime,
+    });
+
+    state.lastGood = { title, image };
     setTitle(context, title);
-    setImage(
-      context,
-      makeKeyImage({
-        mode,
-        placeName: settings.placeName,
-        temperature: weather.current.temperature,
-        condition: weather.current.condition,
-        icon: weather.current.icon,
-        bathTemperature,
-        bathPlace,
-        bathDistanceKm,
-        bathTime,
-      }),
-    );
+    setImage(context, image);
   } catch (error) {
+    if (!isCurrentRequest(context, requestId) || state.lastGood) return;
     setTitle(context, "Feil");
     setImage(
       context,
@@ -219,6 +223,17 @@ async function refreshContext(context) {
       }),
     );
   }
+}
+
+function startRequest(context) {
+  const state = contexts.get(context);
+  if (!state) return 0;
+  state.requestId = (state.requestId || 0) + 1;
+  return state.requestId;
+}
+
+function isCurrentRequest(context, requestId) {
+  return contexts.get(context)?.requestId === requestId;
 }
 
 async function submitReportAction(context, settings) {
@@ -484,7 +499,7 @@ function makeKeyImage(input) {
   <text x="16" y="61" fill="#ffffff" font-family="Arial, sans-serif" font-size="17.5" font-weight="900">${status === "loading" ? "LASTER" : bathPlace}</text>
   <text x="16" y="84" fill="#e2e8f0" font-family="Arial, sans-serif" font-size="15" font-weight="900">${status === "loading" ? "BADETEMP" : bathDistance}</text>
   <text x="16" y="105" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="10" font-weight="800">${status === "loading" ? "YR" : `YR · ${bathTime}`}</text>
-  <text x="113" y="120" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif" font-size="32">🌊</text>
+  ${waterBadge(113, 111)}
 `, "#38bdf8"));
   }
 
@@ -534,7 +549,7 @@ function makeKeyImage(input) {
   <text x="15" y="72" fill="#ffffff" font-family="Arial, sans-serif" font-size="${mainTemp.length > 3 ? 44 : 56}" font-weight="900">${mainTemp}</text>
   <text x="16" y="97" fill="#e2e8f0" font-family="Arial, sans-serif" font-size="12.5" font-weight="900">${bathPlace}</text>
   <text x="16" y="117" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="9.5" font-weight="800">YR · ${bathDistance}</text>
-  <text x="113" y="116" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif" font-size="32">🌊</text>
+  ${waterBadge(113, 111)}
 `, "#38bdf8", 108, 42));
   }
 
@@ -577,6 +592,16 @@ function shell(content, accent = "#38bdf8", glowX = 106, glowY = 106) {
 
 function dataUri(svg) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function waterBadge(cx = 113, cy = 111) {
+  return `
+  <g transform="translate(${cx - 18} ${cy - 18})">
+    <circle cx="18" cy="18" r="18" fill="#075985" opacity=".92"/>
+    <circle cx="26" cy="10" r="11" fill="#38bdf8" opacity=".22"/>
+    <path d="M7 22c4.2-4.1 8.4-4.1 12.6 0 3.2 3.2 6.4 3.2 9.6 0" fill="none" stroke="#e0f2fe" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M7 29c4.2-4.1 8.4-4.1 12.6 0 3.2 3.2 6.4 3.2 9.6 0" fill="none" stroke="#38bdf8" stroke-width="3.2" stroke-linecap="round"/>
+  </g>`;
 }
 
 function escapeXml(value) {
