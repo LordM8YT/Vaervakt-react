@@ -596,7 +596,9 @@ function App() {
               </Link>
             </Box>
           </Box>
-          <Search onSearchChange={searchChangeHandler} />
+          {activeTab !== "glimpse" && (
+            <Search onSearchChange={searchChangeHandler} />
+          )}
           {locationStatus && (
             <Box
               role="status"
