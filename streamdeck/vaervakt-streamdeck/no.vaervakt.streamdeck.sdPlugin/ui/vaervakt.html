@@ -306,6 +306,14 @@
       return fields.bathLocationId.value ? selected?.dataset.name || selected?.textContent || "" : "";
     }
 
+    function setSelectedBathOption(id) {
+      fields.bathLocationId.value = id || "";
+      const selectedName = getSelectedBathName();
+      if (selectedName) {
+        setStatus(bathStatus, `Valgt badeplass: ${selectedName}.`, "ok");
+      }
+    }
+
     function ensureBathOption(id, name) {
       if (!id || findBathOption(id)) {
         return;
@@ -320,6 +328,7 @@
 
     function updateBathOptions(places) {
       const currentId = fields.bathLocationId.value || settings.bathLocationId || "";
+      const currentName = getSelectedBathName() || settings.bathLocationName || "";
       fields.bathLocationId.innerHTML = "";
 
       const automatic = document.createElement("option");
@@ -328,17 +337,24 @@
       fields.bathLocationId.append(automatic);
 
       places.forEach((place) => {
-        if (!place.locationId || !place.name) return;
+        const locationId = place.locationId || place.id;
+        if (!locationId || !place.name) return;
         const option = document.createElement("option");
-        option.value = String(place.locationId);
+        option.value = String(locationId);
         option.dataset.name = String(place.name);
         option.textContent = `${place.name} (${formatDistance(place.distanceKm)})`;
         fields.bathLocationId.append(option);
       });
 
-      fields.bathLocationId.value = findBathOption(currentId)
-        ? currentId
-        : "";
+      const matchedById = findBathOption(currentId);
+      const matchedByName = currentName
+        ? Array.from(fields.bathLocationId.options).find((option) => {
+          return option.dataset.name?.toLowerCase() === currentName.toLowerCase();
+        })
+        : null;
+      const nearest = fields.bathLocationId.options[1] || null;
+
+      setSelectedBathOption((matchedById || matchedByName || nearest)?.value || "");
     }
 
     function findBathOption(id) {
@@ -378,6 +394,10 @@
       }
 
       setStatus(bathStatus, `Fant ${places.length} badeplasser nær stedet.`, "ok");
+      const selectedName = getSelectedBathName();
+      if (selectedName) {
+        setStatus(bathStatus, `Fant ${places.length} badeplasser. Bruker ${selectedName}.`, "ok");
+      }
     }
 
     async function applyPlace(result, message = "Sted lagret på knappen.") {
@@ -486,6 +506,15 @@
 
     Object.values(fields).forEach((field) => {
       field.addEventListener("change", saveSettings);
+    });
+
+    fields.bathLocationId.addEventListener("change", () => {
+      const selectedName = getSelectedBathName();
+      setStatus(
+        bathStatus,
+        selectedName ? `Valgt badeplass: ${selectedName}.` : "Bruker nærmeste badeplass automatisk.",
+        selectedName ? "ok" : ""
+      );
     });
 
     usePositionButton.addEventListener("click", () => {

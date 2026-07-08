@@ -29,6 +29,8 @@ const DEFAULT_SETTINGS = {
 
 const contexts = new Map();
 const timers = new Map();
+const startupTimers = new Map();
+const retryTimers = new Map();
 
 function connectElgatoStreamDeckSocket(port, uuid, registerEvent) {
   pluginUUID = uuid;
@@ -54,12 +56,15 @@ function connectElgatoStreamDeckSocket(port, uuid, registerEvent) {
       const settings = normalizeSettings(message.payload?.settings);
       contexts.set(context, { action, settings, requestId: 0, lastGood: null });
       scheduleRefresh(context);
+      scheduleStartupRefresh(context);
       void refreshContext(context);
       return;
     }
 
     if (message.event === "willDisappear") {
       clearRefresh(context);
+      clearStartupRefresh(context);
+      clearRetry(context);
       contexts.delete(context);
       return;
     }
@@ -72,6 +77,7 @@ function connectElgatoStreamDeckSocket(port, uuid, registerEvent) {
       current.requestId = (current.requestId || 0) + 1;
       contexts.set(context, current);
       scheduleRefresh(context);
+      scheduleStartupRefresh(context);
       void refreshContext(context);
       return;
     }
@@ -117,6 +123,51 @@ function clearRefresh(context) {
     clearInterval(timer);
     timers.delete(context);
   }
+}
+
+function scheduleStartupRefresh(context) {
+  clearStartupRefresh(context);
+  const timersForContext = [1200, 5000, 15000].map((delay, index) => setTimeout(() => {
+    const state = contexts.get(context);
+    if (!state) return;
+
+    // Stream Deck can occasionally drop the very first setImage after boot.
+    // A fast second pass keeps the key fresh without waiting for the user to press it.
+    if (index === 0 || !state.lastGood) {
+      void refreshContext(context);
+    }
+  }, delay));
+
+  startupTimers.set(context, timersForContext);
+}
+
+function clearStartupRefresh(context) {
+  const timersForContext = startupTimers.get(context);
+  if (!timersForContext) return;
+
+  timersForContext.forEach((timer) => {
+    clearTimeout(timer);
+  });
+  startupTimers.delete(context);
+}
+
+function scheduleRetry(context, delay = 10000) {
+  clearRetry(context);
+  const retry = setTimeout(() => {
+    retryTimers.delete(context);
+    if (contexts.has(context)) {
+      void refreshContext(context);
+    }
+  }, delay);
+  retryTimers.set(context, retry);
+}
+
+function clearRetry(context) {
+  const retry = retryTimers.get(context);
+  if (!retry) return;
+
+  clearTimeout(retry);
+  retryTimers.delete(context);
 }
 
 async function handleKeyDown(context) {
@@ -220,6 +271,7 @@ async function refreshContext(context) {
         message: error instanceof Error ? error.message : "Kunne ikke hente data",
       }),
     );
+    scheduleRetry(context);
   }
 }
 
@@ -514,8 +566,8 @@ function makeKeyImage(input) {
   const icon = escapeXml(input.icon || conditionIcon(input.condition));
   const temp = escapeXml(formatTemperature(input.temperature));
   const bathTemp = escapeXml(formatTemperature(input.bathTemperature));
-  const bathPlace = text(input.bathPlace || "Badeplass", 10);
-  const bathDistance = escapeXml(formatDistance(input.bathDistanceKm) || "NÆR DEG");
+  const bathPlace = text(input.bathPlace || input.placeName || "Ingen måling", 10);
+  const bathDistance = escapeXml(formatDistance(input.bathDistanceKm) || "VELG STED");
   const bathTime = escapeXml(formatShortTime(input.bathTime));
   const message = text(input.message || "Oppdaterer", 11);
   const reportCondition = input.reportCondition || "Sol / Klart";
