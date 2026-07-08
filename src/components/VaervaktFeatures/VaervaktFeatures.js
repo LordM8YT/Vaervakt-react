@@ -27,6 +27,7 @@ import {
 
 const PROFILE_KEY = "vaervakt_hub_profile";
 const REPORTER_KEY = "vaervakt_reporter_name";
+const VOTES_KEY_PREFIX = "vaervakt_hub_votes_";
 const VIPPS_URL = "https://betal.vipps.no/opy01u";
 const MAX_CLIENT_IMAGE_BYTES = 10 * 1024 * 1024;
 
@@ -275,6 +276,29 @@ function getStoredReporterName() {
     return window.localStorage.getItem(REPORTER_KEY) || "";
   } catch (error) {
     return "";
+  }
+}
+
+function getStoredVotes(userId) {
+  if (!userId) {
+    return {};
+  }
+  try {
+    const raw = window.localStorage.getItem(`${VOTES_KEY_PREFIX}${userId}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function setStoredVotes(userId, votes) {
+  if (!userId) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(`${VOTES_KEY_PREFIX}${userId}`, JSON.stringify(votes));
+  } catch (error) {
+    // Ignore storage errors (e.g. private browsing).
   }
 }
 
@@ -560,6 +584,7 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
   const [isLoading, setIsLoading] = useState(false);
   const [notice, setNotice] = useState(null);
   const [profile, setProfile] = useState(() => getStoredProfile());
+  const [votedPosts, setVotedPosts] = useState(() => getStoredVotes(getStoredProfile()?.user?.id));
   const [profileForm, setProfileForm] = useState({ displayName: "", pin: "" });
   const [reportForm, setReportForm] = useState({
     username: getStoredReporterName(),
@@ -748,6 +773,7 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
       const nextProfile = { user: result.user, token: result.token };
       setProfile(nextProfile);
       window.localStorage.setItem(PROFILE_KEY, JSON.stringify(nextProfile));
+      setVotedPosts(getStoredVotes(nextProfile.user.id));
       setProfileForm({ displayName: "", pin: "" });
       setNotice({ severity: "success", text: result.message || "Profilen er klar." });
     } catch (error) {
@@ -852,18 +878,37 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
     }
   };
 
+  const isOwnPost = (post) => {
+    if (!profile || !post) {
+      return false;
+    }
+    if (post.userId !== undefined && post.userId !== null) {
+      return String(post.userId) === String(profile.user.id);
+    }
+    return Boolean(post.displayName) && post.displayName === profile.user.displayName;
+  };
+
   const handleVote = async (postId, vote) => {
     if (!profile) {
       setNotice({ severity: "info", text: "Logg inn med navn og PIN for å stemme." });
       return;
     }
 
+    const targetPost = posts.find((post) => post.id === postId);
+    if (isOwnPost(targetPost)) {
+      setNotice({ severity: "info", text: "Du kan ikke stemme på ditt eget værglimt." });
+      return;
+    }
+
+    const alreadyVoted = votedPosts[postId] === vote;
+    const nextVote = alreadyVoted ? 0 : vote;
+
     try {
       const result = await voteHubPost({
         userId: profile.user.id,
         token: profile.token,
         postId,
-        vote,
+        vote: nextVote,
       });
       setPosts((current) =>
         current.map((post) =>
@@ -872,6 +917,16 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
             : post
         )
       );
+      setVotedPosts((current) => {
+        const next = { ...current };
+        if (nextVote === 0) {
+          delete next[postId];
+        } else {
+          next[postId] = nextVote;
+        }
+        setStoredVotes(profile.user.id, next);
+        return next;
+      });
     } catch (error) {
       setNotice({ severity: "error", text: error.message });
     }
@@ -879,6 +934,7 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
 
   const logout = () => {
     setProfile(null);
+    setVotedPosts({});
     window.localStorage.removeItem(PROFILE_KEY);
     setNotice({ severity: "info", text: "Du er logget ut av Værglimt." });
   };
@@ -1751,16 +1807,30 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
                         <Stack alignItems="center" justifyContent="center" spacing={0.45} sx={{ flex: "0 0 auto" }}>
                           <Button
                             size="small"
+                            disabled={isOwnPost(post)}
                             onClick={() => handleVote(post.id, 1)}
+                            title={
+                              isOwnPost(post)
+                                ? "Du kan ikke stemme på ditt eget værglimt."
+                                : votedPosts[post.id] === 1
+                                ? "Fjern stemmen din"
+                                : "Stem opp"
+                            }
                             sx={{
                               minWidth: 0,
                               width: 36,
                               height: 36,
                               borderRadius: "999px",
-                              color: "#06111f",
-                              backgroundColor: "#7dd3fc",
+                              color: votedPosts[post.id] === 1 ? "white" : "#06111f",
+                              backgroundColor: votedPosts[post.id] === 1 ? "#0ea5e9" : "#7dd3fc",
                               fontWeight: 900,
-                              "&:hover": { backgroundColor: "#bae6fd" },
+                              "&:hover": {
+                                backgroundColor: votedPosts[post.id] === 1 ? "#0284c7" : "#bae6fd",
+                              },
+                              "&.Mui-disabled": {
+                                color: "rgba(6,17,31,.5)",
+                                backgroundColor: "rgba(125,211,252,.35)",
+                              },
                             }}
                           >
                             👍
