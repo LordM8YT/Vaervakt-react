@@ -596,9 +596,9 @@ function App() {
               </Link>
             </Box>
           </Box>
-          {activeTab !== "glimpse" && (
+          <Box sx={{ display: activeTab === "glimpse" ? "none" : "block" }}>
             <Search onSearchChange={searchChangeHandler} />
-          )}
+          </Box>
           {locationStatus && (
             <Box
               role="status"
