@@ -2,14 +2,14 @@
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "UUID": "no.vaervakt.streamdeck",
   "Name": "Værvakt",
-  "Version": "0.3.7.0",
+  "Version": "0.3.8.0",
   "Author": "Værvakt.no",
   "Description": "Viser lokalt vær og badetemperaturer fra Værvakt.no på Stream Deck.",
   "Icon": "static/imgs/plugin/marketplace",
   "Category": "Værvakt",
   "CategoryIcon": "static/imgs/plugin/category-icon",
   "CodePath": "plugin.html",
-  "SDKVersion": 2,
+  "SDKVersion": 3,
   "Software": {
     "MinimumVersion": "7.1"
   },
