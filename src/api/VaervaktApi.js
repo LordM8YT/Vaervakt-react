@@ -59,7 +59,7 @@ export function fetchBathTemperatures({ lat, lon }) {
     lon,
   });
 
-  return requestJson(url);
+  return requestJson(url, { cache: "no-store" });
 }
 
 export function submitReport(report) {

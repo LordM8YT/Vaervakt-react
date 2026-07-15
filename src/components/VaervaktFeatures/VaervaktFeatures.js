@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -30,6 +30,45 @@ const PROFILE_KEY = "vaervakt_hub_profile";
 const REPORTER_KEY = "vaervakt_reporter_name";
 const VOTES_KEY_PREFIX = "vaervakt_hub_votes_";
 const VIPPS_URL = "https://betal.vipps.no/opy01u";
+const BATH_CACHE_KEY = "vaervakt_bath_cache_v1";
+const BATH_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+function getBathCacheLocationKey(lat, lon) {
+  const latitude = Number(lat);
+  const longitude = Number(lon);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return "";
+  return `${latitude.toFixed(2)},${longitude.toFixed(2)}`;
+}
+
+function readBathCache(lat, lon) {
+  const locationKey = getBathCacheLocationKey(lat, lon);
+  if (!locationKey || typeof window === "undefined") return [];
+
+  try {
+    const cache = JSON.parse(window.localStorage.getItem(BATH_CACHE_KEY) || "{}");
+    const entry = cache[locationKey];
+    if (!entry || Date.now() - Number(entry.storedAt) > BATH_CACHE_MAX_AGE_MS) return [];
+    return Array.isArray(entry.items) ? entry.items : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function writeBathCache(lat, lon, items) {
+  const locationKey = getBathCacheLocationKey(lat, lon);
+  if (!locationKey || !Array.isArray(items) || items.length === 0 || typeof window === "undefined") return;
+
+  try {
+    const cache = JSON.parse(window.localStorage.getItem(BATH_CACHE_KEY) || "{}");
+    cache[locationKey] = { storedAt: Date.now(), items };
+    const newestEntries = Object.entries(cache)
+      .sort(([, first], [, second]) => Number(second.storedAt) - Number(first.storedAt))
+      .slice(0, 8);
+    window.localStorage.setItem(BATH_CACHE_KEY, JSON.stringify(Object.fromEntries(newestEntries)));
+  } catch (error) {
+    // Badedata skal fortsatt fungere hvis lagring er blokkert i nettleseren.
+  }
+}
 const MAX_CLIENT_IMAGE_BYTES = 10 * 1024 * 1024;
 
 const CONDITIONS = [
@@ -376,9 +415,17 @@ function getBathFreshness(value) {
 
   const hours = Math.max(0, (Date.now() - date.getTime()) / 3600000);
   if (hours < 1) return { label: "Målt siste time", fresh: true };
-  if (hours < 24) return { label: `Målt for ${Math.floor(hours)} t siden`, fresh: true };
+  if (hours < 12) return { label: `Målt for ${Math.floor(hours)} t siden`, fresh: true };
+  if (hours < 24) return { label: `Målt for ${Math.floor(hours)} t siden`, fresh: false };
   if (hours < 48) return { label: "Målt i går", fresh: false };
   return { label: formatBathTime(value), fresh: false };
+}
+
+function getBathAgeHours(value) {
+  if (!value) return Infinity;
+  const date = new Date(String(value).replace(" ", "T"));
+  if (Number.isNaN(date.getTime())) return Infinity;
+  return Math.max(0, (Date.now() - date.getTime()) / 3600000);
 }
 
 function getBathComfort(value) {
@@ -628,9 +675,12 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
     lat: null,
     lon: null,
   });
-  const [bathTemperatures, setBathTemperatures] = useState([]);
+  const [bathTemperatures, setBathTemperatures] = useState(() =>
+    readBathCache(selectedLocation?.lat, selectedLocation?.lon)
+  );
   const [isBathLoading, setIsBathLoading] = useState(false);
   const [isBathSubmitting, setIsBathSubmitting] = useState(false);
+  const [isBathCacheFallback, setIsBathCacheFallback] = useState(false);
   const [bathSearch, setBathSearch] = useState("");
   const [showAllBaths, setShowAllBaths] = useState(false);
   const [showBathReport, setShowBathReport] = useState(false);
@@ -638,6 +688,7 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
   const [glimpseFilter, setGlimpseFilter] = useState("all");
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [isGlimpseSubmitting, setIsGlimpseSubmitting] = useState(false);
+  const refreshRequestId = useRef(0);
   const [snapForm, setSnapForm] = useState({
     type: "rain",
     note: "",
@@ -670,9 +721,12 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
 
   const sortedBathTemperatures = useMemo(
     () =>
-      [...bathTemperatures].sort(
-        (first, second) => Number(first.distanceKm ?? Infinity) - Number(second.distanceKm ?? Infinity)
-      ),
+      [...bathTemperatures].sort((first, second) => {
+        const firstIsFresh = getBathAgeHours(first.time) < 12;
+        const secondIsFresh = getBathAgeHours(second.time) < 12;
+        if (firstIsFresh !== secondIsFresh) return firstIsFresh ? -1 : 1;
+        return Number(first.distanceKm ?? Infinity) - Number(second.distanceKm ?? Infinity);
+      }),
     [bathTemperatures]
   );
 
@@ -693,6 +747,14 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
   const visiblePosts = glimpseFilter === "photos" ? [] : posts;
 
   useEffect(() => {
+    const cachedItems = readBathCache(locationCoordinates.lat, locationCoordinates.lon);
+    setBathTemperatures(cachedItems);
+    setIsBathCacheFallback(cachedItems.length > 0);
+    setBathSearch("");
+    setShowAllBaths(false);
+  }, [locationCoordinates.lat, locationCoordinates.lon]);
+
+  useEffect(() => {
     return () => {
       if (snapForm.previewUrl) {
         URL.revokeObjectURL(snapForm.previewUrl);
@@ -701,6 +763,7 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
   }, [snapForm.previewUrl]);
 
   const refreshCommunityData = async () => {
+    const requestId = ++refreshRequestId.current;
     setIsLoading(true);
     const shouldFetchBath = activeTab === "bath" && locationCoordinates.hasCoordinates;
     setIsBathLoading(shouldFetchBath);
@@ -714,6 +777,9 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
       bathRequest,
     ]);
 
+    // A slower request from the previous tab must not overwrite newer data.
+    if (requestId !== refreshRequestId.current) return;
+
     if (reportResult.status === "fulfilled") {
       setReports(reportResult.value.reports || []);
     }
@@ -726,10 +792,23 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
       setPhotos(photoResult.value.photos || []);
     }
 
-    if (bathResult.status === "fulfilled") {
-      setBathTemperatures(bathResult.value?.bathing?.nearby || []);
-    } else {
-      setBathTemperatures([]);
+    if (shouldFetchBath && bathResult.status === "fulfilled") {
+      const bathItems = bathResult.value?.bathing?.nearby || [];
+      if (bathItems.length > 0) {
+        setBathTemperatures(bathItems);
+        setIsBathCacheFallback(false);
+        writeBathCache(locationCoordinates.lat, locationCoordinates.lon, bathItems);
+      } else {
+        const cachedItems = readBathCache(locationCoordinates.lat, locationCoordinates.lon);
+        setBathTemperatures(cachedItems);
+        setIsBathCacheFallback(cachedItems.length > 0);
+      }
+    } else if (shouldFetchBath && bathResult.status === "rejected") {
+      const cachedItems = readBathCache(locationCoordinates.lat, locationCoordinates.lon);
+      if (cachedItems.length > 0) {
+        setBathTemperatures(cachedItems);
+        setIsBathCacheFallback(true);
+      }
     }
 
     if (
@@ -1227,7 +1306,7 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
             <Box sx={sectionSx}>
               <SectionHeading
                 title="Bad i nærheten"
-                subtitle={`Ferske målinger rundt ${location.name}. Nærmeste vises først.`}
+                subtitle={`Målinger rundt ${location.name}. Ferske målinger prioriteres.`}
                 action={
                   <WeatherPillButton onClick={refreshCommunityData} disabled={isBathLoading || isLoading}>
                     {isBathLoading ? "Henter..." : "Oppdater"}
@@ -1235,6 +1314,11 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
                 }
               />
               <Stack spacing={1.1}>
+                {isBathCacheFallback && bathTemperatures.length > 0 && (
+                  <Alert severity="info" sx={{ borderRadius: "14px", py: 0.15 }}>
+                    Viser sist hentede målinger mens Yr oppdateres.
+                  </Alert>
+                )}
                 {isBathLoading && <EmptyState>Laster badetemperaturer i nærheten...</EmptyState>}
 
                 {!isBathLoading && bathTemperatures.length === 0 && (
@@ -1260,7 +1344,11 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
                         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={1.4}>
                           <Box minWidth={0}>
                             <Stack direction="row" spacing={0.65} flexWrap="wrap" useFlexGap sx={{ mb: 0.8 }}>
-                              <Chip label="Nærmest" size="small" sx={{ color: "#06111f", backgroundColor: "#67e8f9", fontWeight: 900 }} />
+                              <Chip
+                                label={freshness.fresh ? "Fersk nær deg" : "Nærmest"}
+                                size="small"
+                                sx={{ color: "#06111f", backgroundColor: "#67e8f9", fontWeight: 900 }}
+                              />
                               <Chip
                                 label={freshness.label}
                                 size="small"
