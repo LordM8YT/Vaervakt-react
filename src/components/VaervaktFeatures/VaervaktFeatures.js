@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Chip,
+  Dialog,
   FormControlLabel,
   Grid,
   MenuItem,
@@ -363,6 +364,35 @@ function formatBathTime(value) {
   }).format(date);
 }
 
+function getBathFreshness(value) {
+  if (!value) {
+    return { label: "Ukjent tidspunkt", fresh: false };
+  }
+
+  const date = new Date(String(value).replace(" ", "T"));
+  if (Number.isNaN(date.getTime())) {
+    return { label: "Ukjent tidspunkt", fresh: false };
+  }
+
+  const hours = Math.max(0, (Date.now() - date.getTime()) / 3600000);
+  if (hours < 1) return { label: "Målt siste time", fresh: true };
+  if (hours < 24) return { label: `Målt for ${Math.floor(hours)} t siden`, fresh: true };
+  if (hours < 48) return { label: "Målt i går", fresh: false };
+  return { label: formatBathTime(value), fresh: false };
+}
+
+function getBathComfort(value) {
+  const temperature = Number(value);
+  if (!Number.isFinite(temperature)) {
+    return { label: "Ukjent", color: "rgba(255,255,255,.6)" };
+  }
+  if (temperature < 15) return { label: "Kaldt", color: "#bae6fd" };
+  if (temperature < 18) return { label: "Friskt", color: "#67e8f9" };
+  if (temperature < 21) return { label: "Fint", color: "#6ee7b7" };
+  if (temperature < 24) return { label: "Behagelig", color: "#fcd34d" };
+  return { label: "Varmt", color: "#fb923c" };
+}
+
 function getSnapTypeForPost(post) {
   const text = `${post.title || ""} ${post.body || ""} ${post.category || ""} ${
     post.weatherCondition || ""
@@ -595,10 +625,19 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
     name: "",
     temperature: "",
     heatedWater: false,
+    lat: null,
+    lon: null,
   });
   const [bathTemperatures, setBathTemperatures] = useState([]);
   const [isBathLoading, setIsBathLoading] = useState(false);
   const [isBathSubmitting, setIsBathSubmitting] = useState(false);
+  const [bathSearch, setBathSearch] = useState("");
+  const [showAllBaths, setShowAllBaths] = useState(false);
+  const [showBathReport, setShowBathReport] = useState(false);
+  const [isGlimpseComposerOpen, setIsGlimpseComposerOpen] = useState(false);
+  const [glimpseFilter, setGlimpseFilter] = useState("all");
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [isGlimpseSubmitting, setIsGlimpseSubmitting] = useState(false);
   const [snapForm, setSnapForm] = useState({
     type: "rain",
     note: "",
@@ -628,6 +667,30 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
       hasCoordinates: Number.isFinite(lat) && Number.isFinite(lon),
     };
   }, [location.lat, location.lon]);
+
+  const sortedBathTemperatures = useMemo(
+    () =>
+      [...bathTemperatures].sort(
+        (first, second) => Number(first.distanceKm ?? Infinity) - Number(second.distanceKm ?? Infinity)
+      ),
+    [bathTemperatures]
+  );
+
+  const filteredBathTemperatures = useMemo(() => {
+    const query = bathSearch.trim().toLowerCase();
+    if (!query) return sortedBathTemperatures;
+    return sortedBathTemperatures.filter((bath) =>
+      `${bath.name || ""} ${bath.municipality || ""}`.toLowerCase().includes(query)
+    );
+  }, [bathSearch, sortedBathTemperatures]);
+
+  const nearestBath = !bathSearch ? sortedBathTemperatures[0] || null : null;
+  const bathList = nearestBath
+    ? filteredBathTemperatures.filter((bath) => bath !== nearestBath)
+    : filteredBathTemperatures;
+  const visibleBaths = showAllBaths ? bathList : bathList.slice(0, 4);
+  const visiblePhotos = glimpseFilter === "posts" ? [] : photos;
+  const visiblePosts = glimpseFilter === "photos" ? [] : posts;
 
   useEffect(() => {
     return () => {
@@ -722,6 +785,15 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
     event.preventDefault();
     const temperature = normalizeTemp(bathForm.temperature);
     const name = bathForm.name.trim();
+    const selectedLat = Number(bathForm.lat);
+    const selectedLon = Number(bathForm.lon);
+    const hasSelectedBathCoordinates =
+      bathForm.lat !== null &&
+      bathForm.lat !== "" &&
+      bathForm.lon !== null &&
+      bathForm.lon !== "" &&
+      Number.isFinite(selectedLat) &&
+      Number.isFinite(selectedLon);
 
     if (!name || temperature === null) {
       setNotice({
@@ -731,7 +803,15 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
       return;
     }
 
-    if (!locationCoordinates.hasCoordinates) {
+    if (temperature < -3 || temperature > 45) {
+      setNotice({
+        severity: "info",
+        text: "Badetemperaturen må være mellom -3 og 45 grader.",
+      });
+      return;
+    }
+
+    if (!hasSelectedBathCoordinates && !locationCoordinates.hasCoordinates) {
       setNotice({
         severity: "info",
         text: "Velg posisjon eller søk opp badeplassen først, så Yr får riktige koordinater.",
@@ -745,12 +825,13 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
       const result = await submitBathTemperature({
         name,
         temperature,
-        lat: locationCoordinates.lat,
-        lon: locationCoordinates.lon,
+        lat: hasSelectedBathCoordinates ? selectedLat : locationCoordinates.lat,
+        lon: hasSelectedBathCoordinates ? selectedLon : locationCoordinates.lon,
         heatedWater: bathForm.heatedWater,
         reporter: reportForm.username.trim() || profile?.user?.displayName || "",
       });
-      setBathForm({ name: "", temperature: "", heatedWater: false });
+      setBathForm({ name: "", temperature: "", heatedWater: false, lat: null, lon: null });
+      setShowBathReport(false);
       setNotice({
         severity: "success",
         text: result.message || "Badetemperaturen er sendt til Yr.",
@@ -761,6 +842,23 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
     } finally {
       setIsBathSubmitting(false);
     }
+  };
+
+  const selectBathForReport = (bath) => {
+    setBathForm((current) => ({
+      ...current,
+      name: bath.name || "",
+      lat: bath.lat ?? null,
+      lon: bath.lon ?? null,
+    }));
+    setShowBathReport(true);
+    window.navigator.vibrate?.(8);
+    window.setTimeout(() => {
+      document.getElementById("bath-report-form")?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 50);
   };
 
   const handleProfileAction = async (action) => {
@@ -829,12 +927,15 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
   const handleSnapSubmit = async (event) => {
     event.preventDefault();
 
+    if (isGlimpseSubmitting) return;
+
     if (!profile) {
       setNotice({ severity: "info", text: "Logg inn med navn og PIN før du sender værglimt." });
       return;
     }
 
     try {
+      setIsGlimpseSubmitting(true);
       if (snapForm.file) {
         const formData = new FormData();
         formData.append("userId", profile.user.id);
@@ -872,9 +973,12 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
         setSnapForm((current) => ({ ...current, note: "" }));
         setNotice({ severity: "success", text: "Værglimtet er publisert." });
       }
+      setIsGlimpseComposerOpen(false);
       await refreshCommunityData();
     } catch (error) {
       setNotice({ severity: "error", text: error.message });
+    } finally {
+      setIsGlimpseSubmitting(false);
     }
   };
 
@@ -1122,207 +1226,207 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
           <>
             <Box sx={sectionSx}>
               <SectionHeading
-                title="Badetemperatur"
-                subtitle="Se ferske målinger i nærheten, eller send inn din egen."
+                title="Bad i nærheten"
+                subtitle={`Ferske målinger rundt ${location.name}. Nærmeste vises først.`}
+                action={
+                  <WeatherPillButton onClick={refreshCommunityData} disabled={isBathLoading || isLoading}>
+                    {isBathLoading ? "Henter..." : "Oppdater"}
+                  </WeatherPillButton>
+                }
               />
-              <Stack spacing={0.85} sx={{ mb: 1.25 }}>
-                {isBathLoading && (
-                  <EmptyState>Laster badetemperaturer i nærheten...</EmptyState>
-                )}
+              <Stack spacing={1.1}>
+                {isBathLoading && <EmptyState>Laster badetemperaturer i nærheten...</EmptyState>}
+
                 {!isBathLoading && bathTemperatures.length === 0 && (
                   <EmptyState>
-                    Fant ingen ferske badetemperaturer innenfor 50 km. Yr viser bare målinger fra de siste fem døgnene.
+                    Ingen ferske målinger innenfor 50 km akkurat nå. Du kan fortsatt registrere en måling nedenfor.
                   </EmptyState>
                 )}
-                {!isBathLoading &&
-                  bathTemperatures.map((bath) => (
-                    <Stack
-                      key={`${bath.locationId || bath.name}-${bath.time}`}
-                      direction="row"
-                      alignItems="center"
-                      justifyContent="space-between"
-                      gap={1.15}
-                      sx={{
-                        ...cardSx,
-                        px: { xs: 1.15, sm: 1.45 },
-                        py: { xs: 1.05, sm: 1.15 },
-                        background:
-                          "linear-gradient(135deg, rgba(14,165,233,.18), rgba(9,16,36,.82) 58%, rgba(7,12,27,.9))",
-                      }}
-                    >
-                      <Stack direction="row" alignItems="center" gap={1} minWidth={0}>
-                        <Box
-                          sx={{
-                            width: 40,
-                            height: 40,
-                            flex: "0 0 auto",
-                            borderRadius: "15px",
-                            display: "grid",
-                            placeItems: "center",
-                            background:
-                              "radial-gradient(circle at 35% 25%, rgba(186,230,253,.8), rgba(14,165,233,.22) 48%, rgba(14,165,233,.08))",
-                            fontSize: "1.22rem",
-                          }}
+
+                {!isBathLoading && nearestBath &&
+                  ((bath) => {
+                    const comfort = getBathComfort(bath.temperature);
+                    const freshness = getBathFreshness(bath.time);
+                    return (
+                      <Box
+                        sx={{
+                          ...cardSx,
+                          p: { xs: 1.45, sm: 1.9 },
+                          overflow: "hidden",
+                          background:
+                            "radial-gradient(circle at 88% 12%, rgba(103,232,249,.28), transparent 34%), linear-gradient(135deg, rgba(14,165,233,.24), rgba(9,16,36,.9) 62%)",
+                        }}
+                      >
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={1.4}>
+                          <Box minWidth={0}>
+                            <Stack direction="row" spacing={0.65} flexWrap="wrap" useFlexGap sx={{ mb: 0.8 }}>
+                              <Chip label="Nærmest" size="small" sx={{ color: "#06111f", backgroundColor: "#67e8f9", fontWeight: 900 }} />
+                              <Chip
+                                label={freshness.label}
+                                size="small"
+                                sx={{
+                                  color: freshness.fresh ? "#bbf7d0" : "#fde68a",
+                                  backgroundColor: freshness.fresh ? "rgba(34,197,94,.12)" : "rgba(245,158,11,.12)",
+                                  fontWeight: 750,
+                                }}
+                              />
+                            </Stack>
+                            <Typography sx={{ color: "white", fontWeight: 900, fontSize: { xs: "1.05rem", sm: "1.2rem" } }}>
+                              {bath.name}
+                            </Typography>
+                            <Typography sx={{ color: "rgba(255,255,255,.55)", fontSize: "0.78rem", mt: 0.35 }}>
+                              {[bath.municipality, formatBathDistance(bath.distanceKm)].filter(Boolean).join(" · ")}
+                            </Typography>
+                          </Box>
+                          <Box textAlign="right" flex="0 0 auto">
+                            <Typography sx={{ color: "white", fontWeight: 950, fontSize: { xs: "2.1rem", sm: "2.5rem" }, lineHeight: 0.95 }}>
+                              {formatBathTemperature(bath.temperature)}°
+                            </Typography>
+                            <Typography sx={{ color: comfort.color, fontSize: "0.75rem", mt: 0.55, fontWeight: 900 }}>
+                              {comfort.label}
+                            </Typography>
+                          </Box>
+                        </Stack>
+                        <Button
+                          type="button"
+                          onClick={() => selectBathForReport(bath)}
+                          sx={{ mt: 1.25, px: 0, minHeight: 0, color: "#7dd3fc", fontWeight: 850, textTransform: "none" }}
                         >
-                          🌊
-                        </Box>
-                        <Box minWidth={0}>
-                          <Typography
-                            noWrap
-                            sx={{ color: "white", fontWeight: 850, fontSize: "0.9rem", lineHeight: 1.15 }}
-                          >
-                            {bath.name}
-                          </Typography>
-                          <Typography
-                            noWrap
-                            sx={{ color: "rgba(255,255,255,.48)", fontSize: "0.72rem", mt: 0.35 }}
-                          >
-                            {[
-                              bath.municipality,
-                              formatBathDistance(bath.distanceKm),
-                              formatBathTime(bath.time),
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </Typography>
-                          {bath.heatedWater && (
-                            <Chip
-                              label="Oppvarmet"
-                              size="small"
-                              sx={{
-                                mt: 0.7,
-                                height: 20,
-                                borderRadius: "999px",
-                                color: "#bae6fd",
-                                backgroundColor: "rgba(14,165,233,.13)",
-                                border: "1px solid rgba(125,211,252,.18)",
-                                fontSize: "0.66rem",
-                                fontWeight: 800,
-                              }}
-                            />
-                          )}
-                        </Box>
-                      </Stack>
-                      <Box textAlign="right" flex="0 0 auto">
-                        <Typography sx={{ color: "white", fontWeight: 900, fontSize: "1.12rem", lineHeight: 1 }}>
-                          {formatBathTemperature(bath.temperature)}°
-                        </Typography>
-                        <Typography sx={{ color: "rgba(186,230,253,.62)", fontSize: "0.66rem", mt: 0.45, fontWeight: 800 }}>
-                          Yr
-                        </Typography>
+                          Rapporter ny måling her →
+                        </Button>
                       </Box>
+                    );
+                  })(nearestBath)}
+
+                {!isBathLoading && bathTemperatures.length > 1 && (
+                  <>
+                    <TextField
+                      value={bathSearch}
+                      onChange={(event) => {
+                        setBathSearch(event.target.value);
+                        setShowAllBaths(false);
+                      }}
+                      placeholder="Filtrer badeplasser i nærheten"
+                      inputProps={{ "aria-label": "Filtrer badeplasser" }}
+                      fullWidth
+                      sx={inputSx}
+                    />
+                    <Stack spacing={0.8}>
+                      {visibleBaths.map((bath) => {
+                        const comfort = getBathComfort(bath.temperature);
+                        const freshness = getBathFreshness(bath.time);
+                        return (
+                          <Stack
+                            key={`${bath.locationId || bath.name}-${bath.time}`}
+                            direction="row"
+                            alignItems="center"
+                            justifyContent="space-between"
+                            gap={1}
+                            sx={{ ...cardSx, px: 1.15, py: 1 }}
+                          >
+                            <Box minWidth={0}>
+                              <Typography noWrap sx={{ color: "white", fontWeight: 850, fontSize: "0.88rem" }}>
+                                {bath.name}
+                              </Typography>
+                              <Typography noWrap sx={{ color: "rgba(255,255,255,.45)", fontSize: "0.7rem", mt: 0.3 }}>
+                                {[formatBathDistance(bath.distanceKm), freshness.label].filter(Boolean).join(" · ")}
+                              </Typography>
+                            </Box>
+                            <Stack direction="row" alignItems="center" spacing={1} flex="0 0 auto">
+                              <Box textAlign="right">
+                                <Typography sx={{ color: "white", fontWeight: 900 }}>{formatBathTemperature(bath.temperature)}°</Typography>
+                                <Typography sx={{ color: comfort.color, fontSize: "0.65rem", fontWeight: 850 }}>{comfort.label}</Typography>
+                              </Box>
+                              <WeatherPillButton type="button" onClick={() => selectBathForReport(bath)}>
+                                Velg
+                              </WeatherPillButton>
+                            </Stack>
+                          </Stack>
+                        );
+                      })}
+                      {visibleBaths.length === 0 && <EmptyState>Ingen badeplasser matcher søket.</EmptyState>}
                     </Stack>
-                  ))}
+                    {bathList.length > 4 && (
+                      <WeatherPillButton type="button" onClick={() => setShowAllBaths((value) => !value)}>
+                        {showAllBaths ? "Vis færre" : `Vis alle ${bathList.length}`}
+                      </WeatherPillButton>
+                    )}
+                  </>
+                )}
+
                 {bathTemperatures.length > 0 && (
                   <Typography sx={{ color: "rgba(255,255,255,.38)", fontSize: "0.68rem", px: 0.35 }}>
-                    Badetemperaturer levert av Yr.
+                    Badetemperaturer levert av Yr. Måletidspunkt vises på hver badeplass.
                   </Typography>
                 )}
-              </Stack>
-              <Stack
-                component="form"
-                spacing={1.25}
-                onSubmit={handleBathSubmit}
-                sx={{
-                  ...cardSx,
-                  p: { xs: 1.4, sm: 1.6 },
-                  background:
-                    "linear-gradient(135deg, rgba(14,165,233,.15), rgba(6,182,212,.08) 52%, rgba(9,16,36,.84))",
-                }}
-              >
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-              <TextField
-                label="Badeplass"
-                placeholder="For eksempel Bystranda"
-                value={bathForm.name}
-                onChange={(event) =>
-                  setBathForm((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }))
-                }
-                fullWidth
-                sx={inputSx}
-              />
-              <TextField
-                label="Badetemp °C"
-                placeholder="19,5"
-                value={bathForm.temperature}
-                onChange={(event) =>
-                  setBathForm((current) => ({
-                    ...current,
-                    temperature: event.target.value,
-                  }))
-                }
-                inputProps={{ inputMode: "decimal" }}
-                fullWidth
-                sx={inputSx}
-              />
-            </Stack>
 
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              spacing={1}
-              alignItems={{ xs: "stretch", sm: "center" }}
-              justifyContent="space-between"
-            >
-              <Box>
-                <Typography sx={{ color: "rgba(255,255,255,.68)", fontSize: "0.78rem" }}>
-                  Bruk søk eller posisjon på badeplassen først. Yr matcher på navn og koordinater.
-                </Typography>
-                <Typography sx={{ color: "rgba(255,255,255,.42)", fontSize: "0.72rem", mt: 0.3 }}>
-                  Sender fra {location.name}
-                  {locationCoordinates.hasCoordinates
-                    ? ` (${locationCoordinates.lat.toFixed(4)}, ${locationCoordinates.lon.toFixed(4)})`
-                    : " uten koordinater"}
-                  .
-                </Typography>
-              </Box>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={bathForm.heatedWater}
-                    onChange={(event) =>
-                      setBathForm((current) => ({
-                        ...current,
-                        heatedWater: event.target.checked,
-                      }))
-                    }
-                    size="small"
-                  />
-                }
-                label="Oppvarmet"
-                sx={{
-                  color: "rgba(255,255,255,.68)",
-                  m: 0,
-                  "& .MuiFormControlLabel-label": { fontSize: "0.78rem", fontWeight: 700 },
-                  "& .MuiSwitch-switchBase.Mui-checked": { color: "#38bdf8" },
-                  "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
-                    backgroundColor: "#38bdf8",
-                  },
-                }}
-              />
-            </Stack>
+                <Button
+                  type="button"
+                  onClick={() => setShowBathReport((value) => !value)}
+                  sx={{
+                    borderRadius: "14px",
+                    py: 1.05,
+                    color: showBathReport ? "rgba(255,255,255,.75)" : "#06111f",
+                    fontWeight: 900,
+                    background: showBathReport ? "rgba(255,255,255,.06)" : "linear-gradient(135deg, #67e8f9, #38bdf8)",
+                    textTransform: "none",
+                  }}
+                >
+                  {showBathReport ? "Lukk registrering" : "＋ Registrer badetemperatur"}
+                </Button>
 
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={isBathSubmitting}
-              sx={{
-                borderRadius: "14px",
-                py: 1.05,
-                color: "#06111f",
-                fontWeight: 900,
-                background: "linear-gradient(135deg, #67e8f9, #38bdf8)",
-                boxShadow: "0 10px 24px rgba(56, 189, 248, .18)",
-                textTransform: "none",
-                "&:hover": {
-                  background: "linear-gradient(135deg, #a5f3fc, #38bdf8)",
-                },
-              }}
-            >
-              {isBathSubmitting ? "Sender til Yr..." : "Send badetemperatur til Yr"}
-            </Button>
+                {showBathReport && (
+                  <Stack
+                    id="bath-report-form"
+                    component="form"
+                    spacing={1.2}
+                    onSubmit={handleBathSubmit}
+                    sx={{ ...cardSx, p: { xs: 1.35, sm: 1.6 }, background: "rgba(14,165,233,.08)" }}
+                  >
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
+                      <Box>
+                        <Typography sx={{ color: "white", fontWeight: 850 }}>Registrer måling</Typography>
+                        <Typography sx={{ color: "rgba(255,255,255,.45)", fontSize: "0.72rem", mt: 0.25 }}>
+                          Målingen sendes videre til Yr.
+                        </Typography>
+                      </Box>
+                      {bathForm.lat !== null && <Chip label="Valgt fra Yr" size="small" sx={{ color: "#bae6fd", backgroundColor: "rgba(14,165,233,.12)" }} />}
+                    </Stack>
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                      <TextField
+                        label="Badeplass"
+                        placeholder="For eksempel Bystranda"
+                        value={bathForm.name}
+                        onChange={(event) => setBathForm((current) => ({ ...current, name: event.target.value, lat: null, lon: null }))}
+                        inputProps={{ maxLength: 140 }}
+                        fullWidth
+                        sx={inputSx}
+                      />
+                      <TextField
+                        label="Badetemp °C"
+                        placeholder="19,5"
+                        value={bathForm.temperature}
+                        onChange={(event) => setBathForm((current) => ({ ...current, temperature: event.target.value }))}
+                        inputProps={{ inputMode: "decimal", min: -3, max: 45, step: 0.1 }}
+                        fullWidth
+                        sx={inputSx}
+                      />
+                    </Stack>
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "stretch", sm: "center" }} justifyContent="space-between">
+                      <Typography sx={{ color: "rgba(255,255,255,.48)", fontSize: "0.72rem" }}>
+                        {bathForm.lat !== null ? `Bruker koordinatene til ${bathForm.name}.` : `Bruker valgt sted: ${location.name}.`}
+                      </Typography>
+                      <FormControlLabel
+                        control={<Switch checked={bathForm.heatedWater} onChange={(event) => setBathForm((current) => ({ ...current, heatedWater: event.target.checked }))} size="small" />}
+                        label="Oppvarmet vann"
+                        sx={{ color: "rgba(255,255,255,.68)", m: 0, "& .MuiFormControlLabel-label": { fontSize: "0.76rem", fontWeight: 700 } }}
+                      />
+                    </Stack>
+                    <Button type="submit" variant="contained" disabled={isBathSubmitting} sx={{ borderRadius: "14px", py: 1.05, color: "#06111f", fontWeight: 900, background: "linear-gradient(135deg, #67e8f9, #38bdf8)", textTransform: "none" }}>
+                      {isBathSubmitting ? "Sender til Yr..." : "Send måling"}
+                    </Button>
+                  </Stack>
+                )}
               </Stack>
             </Box>
 
@@ -1379,18 +1483,40 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
           <Box sx={sectionSx}>
             <SectionHeading
               title="Værglimt"
-              subtitle="Korte lokale værtegn, litt mer Snap enn forum."
+              subtitle={`${photos.length + posts.length} lokale glimt rundt ${location.name}.`}
               action={
-                <Stack direction="row" spacing={0.75}>
-                  <WeatherPillButton selected={sort === "new"} onClick={() => setSort("new")}>
-                    Fersk
+                <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                  <WeatherPillButton onClick={refreshCommunityData} disabled={isLoading}>
+                    {isLoading ? "Henter..." : "Oppdater"}
                   </WeatherPillButton>
-                  <WeatherPillButton selected={sort === "top"} onClick={() => setSort("top")}>
-                    Nyttig
+                  <WeatherPillButton
+                    selected={isGlimpseComposerOpen}
+                    onClick={() => setIsGlimpseComposerOpen((value) => !value)}
+                  >
+                    {isGlimpseComposerOpen ? "Lukk" : "＋ Nytt glimt"}
                   </WeatherPillButton>
                 </Stack>
               }
             />
+
+            <Stack direction="row" spacing={0.65} flexWrap="wrap" useFlexGap sx={{ mb: 1.35 }}>
+              <WeatherPillButton selected={glimpseFilter === "all"} onClick={() => setGlimpseFilter("all")}>
+                Alle {photos.length + posts.length}
+              </WeatherPillButton>
+              <WeatherPillButton selected={glimpseFilter === "photos"} onClick={() => setGlimpseFilter("photos")}>
+                Bilder {photos.length}
+              </WeatherPillButton>
+              <WeatherPillButton selected={glimpseFilter === "posts"} onClick={() => setGlimpseFilter("posts")}>
+                Tekst {posts.length}
+              </WeatherPillButton>
+              <Box sx={{ flex: 1 }} />
+              <WeatherPillButton selected={sort === "new"} onClick={() => setSort("new")}>
+                Fersk
+              </WeatherPillButton>
+              <WeatherPillButton selected={sort === "top"} onClick={() => setSort("top")}>
+                Nyttig
+              </WeatherPillButton>
+            </Stack>
 
           <Grid
             container
@@ -1398,6 +1524,7 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
             columnSpacing={{ xs: 0, md: 1.4 }}
             sx={{ width: "100%", minWidth: 0, margin: 0 }}
           >
+            {isGlimpseComposerOpen && (
             <Grid item xs={12} md={5}>
               <Stack spacing={1.2} sx={{ ...cardSx, p: 1.5 }}>
                 {!profile ? (
@@ -1578,7 +1705,7 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
                             },
                           }}
                         >
-                          Legg til bilde
+                          📷 Ta eller velg bilde
                           <input
                             hidden
                             type="file"
@@ -1614,6 +1741,8 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
                       }
                       multiline
                       minRows={2}
+                      helperText={`${snapForm.note.length}/180 tegn`}
+                      inputProps={{ maxLength: 180 }}
                       fullWidth
                       sx={inputSx}
                     />
@@ -1621,6 +1750,7 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
                     <Button
                       type="submit"
                       variant="contained"
+                      disabled={isGlimpseSubmitting}
                       sx={{
                         borderRadius: "14px",
                         py: 1.05,
@@ -1633,16 +1763,23 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
                         },
                       }}
                     >
-                      Send {selectedSnapType.icon} {snapForm.file ? "bildeglimt" : "værglimt"}
+                      {isGlimpseSubmitting
+                        ? "Publiserer..."
+                        : `Publiser ${selectedSnapType.icon} ${snapForm.file ? "bildeglimt" : "værglimt"}`}
                     </Button>
                   </Stack>
                 )}
               </Stack>
             </Grid>
+            )}
 
-            <Grid item xs={12} md={7}>
+            <Grid item xs={12} md={isGlimpseComposerOpen ? 7 : 12}>
               <Stack spacing={0.9}>
-                {photos.length > 0 && (
+                {isLoading && photos.length === 0 && posts.length === 0 && (
+                  <EmptyState>Henter lokale værglimt...</EmptyState>
+                )}
+
+                {visiblePhotos.length > 0 && (
                   <Stack
                     direction="row"
                     spacing={1}
@@ -1653,7 +1790,7 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
                       "&::-webkit-scrollbar": { display: "none" },
                     }}
                   >
-                    {photos.map((photo) => {
+                    {visiblePhotos.map((photo) => {
                       const snapType =
                         SNAP_TYPES.find((type) => type.value === photo.snapType) ||
                         getSnapTypeForPost({
@@ -1665,7 +1802,11 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
 
                       return (
                         <Box
+                          component="button"
+                          type="button"
                           key={photo.id}
+                          onClick={() => setSelectedPhoto(photo)}
+                          aria-label={`Åpne bildeglimt: ${photo.title}`}
                           sx={{
                             position: "relative",
                             flex: "0 0 172px",
@@ -1675,6 +1816,12 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
                             border: "1px solid rgba(255,255,255,.12)",
                             backgroundColor: "rgba(7,12,27,.9)",
                             boxShadow: "0 18px 36px rgba(2,6,23,.26)",
+                            p: 0,
+                            color: "inherit",
+                            textAlign: "left",
+                            font: "inherit",
+                            cursor: "pointer",
+                            "&:focus-visible": { outline: "2px solid #7dd3fc", outlineOffset: 2 },
                           }}
                         >
                           <Box
@@ -1742,10 +1889,14 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
                   </Stack>
                 )}
 
-                {posts.length === 0 && photos.length === 0 && (
-                  <EmptyState>Ingen værglimt i nærheten enda. Send det første.</EmptyState>
+                {!isLoading && visiblePosts.length === 0 && visiblePhotos.length === 0 && (
+                  <EmptyState>
+                    {glimpseFilter === "all"
+                      ? "Ingen værglimt i nærheten enda. Send det første."
+                      : "Ingen glimt i dette filteret enda."}
+                  </EmptyState>
                 )}
-                {posts.map((post) => {
+                {visiblePosts.map((post) => {
                   const snapType = getSnapTypeForPost(post);
                   return (
                     <Box
@@ -1848,6 +1999,56 @@ function VaervaktFeatures({ selectedLocation, weather, activeTab = "local", refr
           </Grid>
           </Box>
         )}
+
+        <Dialog
+          open={Boolean(selectedPhoto)}
+          onClose={() => setSelectedPhoto(null)}
+          fullWidth
+          maxWidth="sm"
+          PaperProps={{
+            sx: {
+              m: { xs: 1.25, sm: 2 },
+              maxHeight: "calc(100svh - 24px)",
+              overflow: "hidden",
+              borderRadius: { xs: "22px", sm: "28px" },
+              background: "#07101f",
+              color: "white",
+              border: "1px solid rgba(255,255,255,.12)",
+              boxShadow: "0 28px 80px rgba(0,0,0,.55)",
+            },
+          }}
+        >
+          {selectedPhoto && (
+            <Box>
+              <Box
+                component="img"
+                src={selectedPhoto.imageUrl}
+                alt={selectedPhoto.title}
+                sx={{ display: "block", width: "100%", maxHeight: "68svh", objectFit: "contain", backgroundColor: "#020617" }}
+              />
+              <Stack spacing={0.7} sx={{ p: 1.5 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={1}>
+                  <Box minWidth={0}>
+                    <Typography sx={{ color: "white", fontWeight: 900, fontSize: "1.05rem" }}>
+                      {selectedPhoto.title}
+                    </Typography>
+                    {selectedPhoto.note && (
+                      <Typography sx={{ color: "rgba(255,255,255,.68)", fontSize: "0.82rem", mt: 0.4 }}>
+                        {selectedPhoto.note}
+                      </Typography>
+                    )}
+                  </Box>
+                  <WeatherPillButton type="button" onClick={() => setSelectedPhoto(null)}>
+                    Lukk
+                  </WeatherPillButton>
+                </Stack>
+                <Typography sx={{ color: "rgba(255,255,255,.45)", fontSize: "0.72rem" }}>
+                  {selectedPhoto.displayName} · {selectedPhoto.location} · {formatExpiry(selectedPhoto.expiresAt)}
+                </Typography>
+              </Stack>
+            </Box>
+          )}
+        </Dialog>
       </Stack>
     </Grid>
   );
