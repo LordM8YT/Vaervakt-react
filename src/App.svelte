@@ -35,7 +35,7 @@
   const PULL_MAX_DISTANCE = 96;
   const TARGET_ACCURACY_METERS = 150;
   const MAX_ACCEPTABLE_ACCURACY_METERS = 3000;
-  const POSITION_ACQUISITION_TIMEOUT_MS = 26000;
+  const POSITION_ACQUISITION_TIMEOUT_MS = 8000;
   const THEME_STORAGE_KEY = "vaervakt_theme";
 
   function isBathSeason(date = new Date()) {
