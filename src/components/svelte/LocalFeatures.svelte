@@ -117,10 +117,10 @@
   let loadSequence = 0;
 
   $: location = {
-    name: selectedLocation?.name || "Kristiansand",
+    name: selectedLocation?.name || "Valgt sted",
     lat: selectedLocation?.lat,
     lon: selectedLocation?.lon,
-    source: selectedLocation?.source || "default",
+    source: selectedLocation?.source || "none",
   };
   $: latNumber = Number(location.lat);
   $: lonNumber = Number(location.lon);

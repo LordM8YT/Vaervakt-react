@@ -37,12 +37,6 @@
   const MAX_ACCEPTABLE_ACCURACY_METERS = 3000;
   const POSITION_ACQUISITION_TIMEOUT_MS = 26000;
   const THEME_STORAGE_KEY = "vaervakt_theme";
-  const DEFAULT_LOCATION = {
-    name: "Kristiansand, NO",
-    lat: 58.1467,
-    lon: 7.9956,
-    source: "default",
-  };
 
   function isBathSeason(date = new Date()) {
     const month = date.getMonth();
@@ -178,13 +172,13 @@
   let todayWeather = null;
   let todayForecast = [];
   let weekForecast = null;
-  let isLoading = true;
+  let isLoading = false;
   let isLocating = false;
   let hasError = false;
   let locationStatus = "";
   let needsManualPlaceSelection = false;
   let communityRefreshKey = 0;
-  let selectedLocation = DEFAULT_LOCATION;
+  let selectedLocation = null;
   let theme = getInitialTheme();
   let isPrivacyOpen = false;
   let localDatetime = getLocalDatetime();
@@ -200,13 +194,13 @@
   $: pullProgress = Math.min(1, pullDistance / PULL_TRIGGER_DISTANCE);
   $: communityHint = isBathSeason() ? "lokale rapporter og badetemperatur" : "lokale rapporter";
   $: selectedLocationSource =
-    selectedLocation.source === "gps"
+    selectedLocation?.source === "gps"
       ? Number.isFinite(Number(selectedLocation.accuracy))
         ? `GPS · ± ${formatAccuracy(selectedLocation.accuracy)}`
         : "GPS"
-      : selectedLocation.source === "search"
+      : selectedLocation?.source === "search"
         ? "Søk"
-        : "Standard";
+        : "";
   $: document.documentElement.dataset.theme = theme;
 
   async function searchChangeHandler(
@@ -323,15 +317,6 @@
       window.history.replaceState({ tab: "weather" }, "", "/");
       activeTab = "weather";
     }
-    searchChangeHandler(
-      {
-        value: `${selectedLocation.lat} ${selectedLocation.lon}`,
-        label: selectedLocation.name,
-      },
-      false,
-      selectedLocation.source || "default",
-      selectedLocation.accuracy || null
-    );
 
     const dateTimer = window.setInterval(() => (localDatetime = getLocalDatetime()), 30000);
     const handlePopState = () => (activeTab = getTabFromPath());
@@ -440,14 +425,16 @@
 
   <Search bind:this={placeSearch} onSelect={searchChangeHandler} />
 
-  <div class="selected-location" aria-live="polite">
-    <div class="selected-location-copy">
-      <MapPin size={17} aria-hidden="true" />
-      <span>Valgt sted</span>
-      <strong title={selectedLocation.name}>{selectedLocation.name}</strong>
+  {#if selectedLocation}
+    <div class="selected-location" aria-live="polite">
+      <div class="selected-location-copy">
+        <MapPin size={17} aria-hidden="true" />
+        <span>Valgt sted</span>
+        <strong title={selectedLocation.name}>{selectedLocation.name}</strong>
+      </div>
+      <span class="selected-location-source">{selectedLocationSource}</span>
     </div>
-    <span class="selected-location-source">{selectedLocationSource}</span>
-  </div>
+  {/if}
 
   {#if locationStatus}
     <div class="location-status" role="status">
