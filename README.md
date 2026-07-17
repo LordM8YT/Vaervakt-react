@@ -9,7 +9,8 @@ Frontend for Værvakt.no, bygget med Svelte 5, Vite og Lucide-ikoner.
 - Krever ingen OpenWeather- eller RapidAPI-nøkler.
 - Starter med Kristiansand som standardvisning.
 - Viser vær nå, time-for-time og de neste dagene.
-- Har lokale værrapporter, badetemperatur og Værglimt.
+- Har lokale værrapporter og badetemperatur.
+- Har lagret lys/mørk visning og nøyaktighetskontroll for GPS-posisjon.
 - Bruker `@lucide/svelte` for vær- og grensesnittikoner.
 
 ## Repo-flyt

@@ -78,6 +78,7 @@ jobs:
           set -eu
 
           rm -rf "${PROD_DIR}/static"
+          rm -rf "${PROD_DIR}/glimt"
           cp -a "${BUILD_DIR}/static" "${PROD_DIR}/static"
 
           for file in asset-manifest.json index.html manifest.json robots.txt service-worker.js weather.ico weather.png; do
@@ -102,7 +103,7 @@ jobs:
           }
 
           fs.writeFileSync(indexPath, html);
-          for (const route of ["lokalt", "bad", "glimt"]) {
+          for (const route of ["lokalt", "bad"]) {
             const routeDirectory = path.join(process.env.PROD_DIR, route);
             fs.mkdirSync(routeDirectory, { recursive: true });
             fs.writeFileSync(path.join(routeDirectory, "index.html"), html);
@@ -119,7 +120,8 @@ jobs:
           git config user.email "actions@github.com"
 
           git add asset-manifest.json index.html manifest.json robots.txt service-worker.js weather.ico weather.png static
-          git add lokalt/index.html bad/index.html glimt/index.html
+          git add lokalt/index.html bad/index.html
+          git add -A glimt
 
           if git diff --cached --quiet; then
             echo "Production repo already has this Svelte build."

@@ -80,59 +80,6 @@ export function submitBathTemperature(report) {
   });
 }
 
-export function fetchHubPosts({ lat, lon, name }, sort = "new", limit = 8) {
-  const url = buildUrl("/api/hub.php", {
-    limit,
-    lat,
-    lon,
-    radiusKm: 35,
-    location: name,
-    sort,
-  });
-
-  return requestJson(url);
-}
-
-export function fetchGlimpsePhotos({ lat, lon, name }, limit = 12) {
-  const url = buildUrl("/api/glimpses.php", {
-    limit,
-    lat,
-    lon,
-    radiusKm: 35,
-    location: name,
-  });
-
-  return requestJson(url);
-}
-
-export function loginHubProfile(displayName, pin, action = "login") {
-  return requestJson("/api/hub.php", {
-    method: "POST",
-    body: JSON.stringify({ action, displayName, pin }),
-  });
-}
-
-export function createHubPost(post) {
-  return requestJson("/api/hub.php", {
-    method: "POST",
-    body: JSON.stringify({ action: "create", ...post }),
-  });
-}
-
-export function uploadGlimpsePhoto(formData) {
-  return requestJson("/api/glimpses.php", {
-    method: "POST",
-    body: formData,
-  });
-}
-
-export function voteHubPost(vote) {
-  return requestJson("/api/hub.php", {
-    method: "POST",
-    body: JSON.stringify({ action: "vote", ...vote }),
-  });
-}
-
 export function trackVisit(path = window.location.pathname) {
   try {
     const target = `${API_BASE}/api/track.php`;
