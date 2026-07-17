@@ -7,7 +7,7 @@ Frontend for Værvakt.no, bygget med Svelte 5, Vite og Lucide-ikoner.
 - Henter værdata fra Meteorologisk institutt via MET Locationforecast.
 - Søker etter steder via OpenStreetMap Nominatim.
 - Krever ingen OpenWeather- eller RapidAPI-nøkler.
-- Starter med Kristiansand som standardvisning.
+- Starter uten valgt sted og henter først vær etter søk eller godkjent GPS-posisjon.
 - Viser vær nå, time-for-time og de neste dagene.
 - Har lokale værrapporter og badetemperatur.
 - Har lys/mørk visning og nøyaktighetskontroll for GPS-posisjon.
