@@ -111,7 +111,9 @@ jobs:
 
           git add asset-manifest.json index.html manifest.json robots.txt service-worker.js weather.ico weather.png static
           git add lokalt/index.html bad/index.html
-          git add -A glimt
+          if [ -e glimt ] || [ -n "$(git ls-files -- glimt)" ]; then
+            git add -A -- glimt
+          fi
 
           if git diff --cached --quiet; then
             echo "Production repo already has this Svelte build."
