@@ -150,7 +150,9 @@ export async function fetchCities(input) {
 }
 
 export async function reverseGeocode(lat, lon) {
-  const vaervaktParams = new URLSearchParams({ lat, lon, v: "2" });
+  const safeLat = Number.isFinite(Number(lat)) ? Number(lat).toFixed(3) : lat;
+  const safeLon = Number.isFinite(Number(lon)) ? Number(lon).toFixed(3) : lon;
+  const vaervaktParams = new URLSearchParams({ lat: safeLat, lon: safeLon, v: "2" });
 
   try {
     const response = await fetch(
@@ -170,8 +172,8 @@ export async function reverseGeocode(lat, lon) {
   }
 
   const params = new URLSearchParams({
-    lat,
-    lon,
+    lat: safeLat,
+    lon: safeLon,
     format: "jsonv2",
     addressdetails: "1",
     zoom: "14",

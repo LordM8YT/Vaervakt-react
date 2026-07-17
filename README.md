@@ -10,8 +10,21 @@ Frontend for Værvakt.no, bygget med Svelte 5, Vite og Lucide-ikoner.
 - Starter med Kristiansand som standardvisning.
 - Viser vær nå, time-for-time og de neste dagene.
 - Har lokale værrapporter og badetemperatur.
-- Har lagret lys/mørk visning og nøyaktighetskontroll for GPS-posisjon.
+- Har lys/mørk visning og nøyaktighetskontroll for GPS-posisjon.
+- Lagrer ikke GPS, søk, alias eller tema i nettleseren etter besøket.
+- Har innebygd personverninformasjon og avrunder rapportkoordinater.
 - Bruker `@lucide/svelte` for vær- og grensesnittikoner.
+
+## Personvern
+
+Frontend setter ingen informasjonskapsler og bruker ingen annonse- eller
+sporingsverktøy. Posisjon hentes bare etter et aktivt klikk og beholdes i minnet
+mens siden er åpen. Eldre Værvakt-lagring og service worker-cache ryddes bort ved
+oppstart.
+
+Produksjons-API-et håndhever egne slettetider og dataminimering for lokale
+rapporter og innsendinger til Yr. Se personvernpanelet i appen for formål,
+behandlingsgrunnlag, mottakere og rettigheter.
 
 ## Repo-flyt
 

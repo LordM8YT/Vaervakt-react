@@ -92,17 +92,7 @@ jobs:
           const path = require("path");
 
           const indexPath = path.join(process.env.PROD_DIR, "index.html");
-          const enhancement = '<script defer="defer" src="/assets/js/live-enhancements.js?v=11"></script>';
-          let html = fs.readFileSync(indexPath, "utf8");
-
-          if (!html.includes("/assets/js/live-enhancements.js")) {
-            html = html.replace(
-              /(<script type="module"[^>]*src="\/static\/js\/)/,
-              `${enhancement}$1`,
-            );
-          }
-
-          fs.writeFileSync(indexPath, html);
+          const html = fs.readFileSync(indexPath, "utf8");
           for (const route of ["lokalt", "bad"]) {
             const routeDirectory = path.join(process.env.PROD_DIR, route);
             fs.mkdirSync(routeDirectory, { recursive: true });

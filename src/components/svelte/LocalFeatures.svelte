@@ -22,8 +22,8 @@
   export let weather;
   export let activeTab = "local";
   export let refreshKey = 0;
+  export let onOpenPrivacy = () => {};
 
-  const REPORTER_KEY = "vaervakt_reporter_name";
   const VIPPS_URL = "https://betal.vipps.no/opy01u";
   const REPORT_RANGE_OPTIONS = [
     { hours: 6, label: "6 timer" },
@@ -38,14 +38,6 @@
     { value: "Snø", label: "Snø", kind: "snow" },
     { value: "Torden", label: "Torden", kind: "thunder" },
   ];
-
-  function readStorage(key, fallback = "") {
-    try {
-      return window.localStorage.getItem(key) ?? fallback;
-    } catch {
-      return fallback;
-    }
-  }
 
   function normalizeTemp(value) {
     const parsed = Number(String(value).replace(",", "."));
@@ -109,7 +101,7 @@
   let isLoading = false;
   let notice = null;
   let reportForm = {
-    username: readStorage(REPORTER_KEY),
+    username: "",
     temperature: "",
     condition: "",
   };
@@ -242,8 +234,8 @@
 
   async function handleReportSubmit() {
     const temperature = normalizeTemp(reportForm.temperature);
-    if (!reportForm.username.trim() || temperature === null || !reportForm.condition) {
-      notice = { severity: "info", text: "Skriv navn, temperatur og værtype før du sender." };
+    if (temperature === null || !reportForm.condition) {
+      notice = { severity: "info", text: "Skriv temperatur og værtype før du sender." };
       return;
     }
     if (temperature < -60 || temperature > 60) {
@@ -258,15 +250,14 @@
     try {
       window.navigator.vibrate?.(12);
       await submitReport({
-        username: reportForm.username.trim(),
+        username: reportForm.username.trim() || "Anonym",
         temperature,
         condition: reportForm.condition,
         location: location.name,
         lat: location.lat,
         lon: location.lon,
       });
-      window.localStorage.setItem(REPORTER_KEY, reportForm.username.trim());
-      reportForm = { ...reportForm, temperature: "", condition: "" };
+      reportForm = { username: "", temperature: "", condition: "" };
       notice = { severity: "success", text: "Rapporten er sendt. Takk!" };
       await refreshLocalData();
     } catch (error) {
@@ -298,7 +289,6 @@
         lat: latNumber,
         lon: lonNumber,
         heatedWater: bathForm.heatedWater,
-        reporter: reportForm.username.trim(),
       });
       bathForm = { name: "", temperature: "", heatedWater: false };
       notice = {
@@ -388,8 +378,13 @@
           </button>
 
           <label>
-            <span>Navn</span>
-            <input maxlength="80" bind:value={reportForm.username} autocomplete="name" />
+            <span>Visningsnavn (valgfritt)</span>
+            <input
+              maxlength="40"
+              placeholder="Bruk gjerne et kallenavn"
+              bind:value={reportForm.username}
+              autocomplete="off"
+            />
           </label>
           <div class="field-row">
             <label>
@@ -413,6 +408,10 @@
               </select>
             </label>
           </div>
+          <p class="privacy-inline">
+            Publiseres i 7 dager med omtrent 1 km stedsnøyaktighet. Ikke bruk fullt navn.
+            <button type="button" on:click={onOpenPrivacy}>Les om personvern</button>
+          </p>
           <button class="primary-button" type="submit" disabled={isLoading}>
             <Send size={17} /> Send værrapport
           </button>
@@ -506,6 +505,10 @@
           {hasCoordinates
             ? ` (${latNumber.toFixed(4)}, ${lonNumber.toFixed(4)})`
             : " uten koordinater"}.
+        </p>
+        <p class="privacy-inline">
+          Badeplass, temperatur og koordinater sendes til Yr. Værvakt lagrer ikke navnet ditt.
+          <button type="button" on:click={onOpenPrivacy}>Les om personvern</button>
         </p>
         <button class="primary-button" type="submit" disabled={isBathSubmitting}>
           {#if isBathSubmitting}

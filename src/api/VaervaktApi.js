@@ -13,6 +13,11 @@ function buildUrl(path, params = {}) {
   return query ? `${path}?${query}` : path;
 }
 
+function roundedCoordinate(value, decimals = 2) {
+  const coordinate = Number(value);
+  return Number.isFinite(coordinate) ? coordinate.toFixed(decimals) : value;
+}
+
 async function requestJson(path, options = {}) {
   const target = path.startsWith("http") ? path : `${API_BASE}${path}`;
   const isFormData =
@@ -47,8 +52,8 @@ export function fetchReports(
 ) {
   const url = buildUrl("/api/reports.php", {
     limit,
-    lat,
-    lon,
+    lat: roundedCoordinate(lat),
+    lon: roundedCoordinate(lon),
     radiusKm: 35,
     location: name,
     maxAgeHours,
@@ -59,8 +64,8 @@ export function fetchReports(
 
 export function fetchBathTemperatures({ lat, lon }) {
   const url = buildUrl("/api/weather.php", {
-    lat,
-    lon,
+    lat: roundedCoordinate(lat, 3),
+    lon: roundedCoordinate(lon, 3),
   });
 
   return requestJson(url, { cache: "no-store" });
@@ -69,7 +74,11 @@ export function fetchBathTemperatures({ lat, lon }) {
 export function submitReport(report) {
   return requestJson("/api/reports.php", {
     method: "POST",
-    body: JSON.stringify(report),
+    body: JSON.stringify({
+      ...report,
+      lat: roundedCoordinate(report.lat),
+      lon: roundedCoordinate(report.lon),
+    }),
   });
 }
 
@@ -78,34 +87,4 @@ export function submitBathTemperature(report) {
     method: "POST",
     body: JSON.stringify(report),
   });
-}
-
-export function trackVisit(path = window.location.pathname) {
-  try {
-    const target = `${API_BASE}/api/track.php`;
-    const payload = JSON.stringify({
-      path,
-      viewport: `${window.innerWidth}x${window.innerHeight}`,
-    });
-
-    if (navigator.sendBeacon) {
-      navigator.sendBeacon(
-        target,
-        new Blob([payload], { type: "application/json" })
-      );
-      return;
-    }
-
-    fetch(target, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: payload,
-      keepalive: true,
-    }).catch(() => {});
-  } catch (error) {
-    // Tracking should never block the weather app.
-  }
 }
