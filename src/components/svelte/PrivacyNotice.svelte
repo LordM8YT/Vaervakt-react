@@ -101,12 +101,10 @@
         <p>
           Værvakt setter ikke informasjonskapsler og bruker ikke reklame- eller
           sporingsverktøy. Valgt lyst eller mørkt tema lagres lokalt til du endrer valget
-          eller sletter nettleserdata. Valgt sted kan mellomlagres i den åpne fanen i
-          maksimalt 30 minutter, slik at det kan brukes etter en omlasting. GPS-koordinater
-          avrundes til tre desimaler før de mellomlagres. Du kan når som helst bruke «Fjern
-          cache», og cachen forsvinner også når fanesesjonen avsluttes eller fristen utløper.
-          Alias lagres ikke. Eldre Værvakt-lagring og service worker-cache fjernes
-          automatisk. Værvakt lager ikke individuelle besøksprofiler.
+          eller sletter nettleserdata. GPS-posisjon og valgte steder brukes bare i minnet
+          mens siden er åpen og lagres ikke i nettleseren. Eldre posisjonslagring,
+          Værvakt-cache og service worker-cache fjernes automatisk ved oppstart. Alias
+          lagres ikke. Værvakt lager ikke individuelle besøksprofiler.
         </p>
       </article>
 

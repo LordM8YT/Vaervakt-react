@@ -167,13 +167,17 @@ export async function fetchCities(input) {
 export async function reverseGeocode(lat, lon) {
   const safeLat = Number.isFinite(Number(lat)) ? Number(lat).toFixed(3) : lat;
   const safeLon = Number.isFinite(Number(lon)) ? Number(lon).toFixed(3) : lon;
-  const vaervaktParams = new URLSearchParams({ lat: safeLat, lon: safeLon, v: "2" });
 
   try {
-    const response = await fetch(
-      `${VAERVAKT_API_BASE}/api/geocode.php?${vaervaktParams.toString()}`,
-      { headers: { Accept: "application/json" } }
-    );
+    const response = await fetch(`${VAERVAKT_API_BASE}/api/geocode.php`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ lat: safeLat, lon: safeLon }),
+    });
     if (!response.ok) {
       throw new Error("Kartverket-oppslaget feilet.");
     }
@@ -195,7 +199,10 @@ export async function reverseGeocode(lat, lon) {
     "accept-language": "nb",
   });
 
-  const response = await fetch(`${NOMINATIM_REVERSE_API_URL}?${params.toString()}`);
+  const response = await fetch(`${NOMINATIM_REVERSE_API_URL}?${params.toString()}`, {
+    cache: "no-store",
+    referrerPolicy: "no-referrer",
+  });
 
   if (!response.ok) {
     throw new Error("Kunne ikke finne stedsnavn for posisjonen.");

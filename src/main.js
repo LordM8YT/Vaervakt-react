@@ -3,7 +3,6 @@ import App from "./App.svelte";
 import "./app.css";
 
 const PERSISTED_LOCAL_KEYS = new Set(["vaervakt_theme"]);
-const PERSISTED_SESSION_KEYS = new Set(["vaervakt_location_session"]);
 
 const app = mount(App, {
   target: document.getElementById("app"),
@@ -15,7 +14,7 @@ function removeLegacyClientData() {
       .filter((key) => key.startsWith("vaervakt_") && !PERSISTED_LOCAL_KEYS.has(key))
       .forEach((key) => window.localStorage.removeItem(key));
     Object.keys(window.sessionStorage)
-      .filter((key) => key.startsWith("vaervakt_") && !PERSISTED_SESSION_KEYS.has(key))
+      .filter((key) => key.startsWith("vaervakt_"))
       .forEach((key) => window.sessionStorage.removeItem(key));
   } catch {
     // Opprydding kan være blokkert i strenge/private nettlesermoduser.

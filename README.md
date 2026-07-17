@@ -13,19 +13,17 @@ Frontend for Værvakt.no, bygget med Svelte 5, Vite og Lucide-ikoner.
 - Har lys/mørk visning og nøyaktighetskontroll for GPS-posisjon.
 - Lagrer ikke alias i nettleseren etter besøket.
 - Husker valgt lyst/mørkt tema som en lokal visningspreferanse.
-- Mellomlagrer valgt sted i fanesesjonen i maksimalt 30 minutter. GPS avrundes til
-  tre desimaler, og brukeren kan slette cachen direkte.
+- Bruker GPS og valgt sted bare i minnet mens siden er åpen.
 - Har innebygd personverninformasjon og avrunder rapportkoordinater.
 - Bruker `@lucide/svelte` for vær- og grensesnittikoner.
 
 ## Personvern
 
 Frontend setter ingen informasjonskapsler og bruker ingen annonse- eller
-sporingsverktøy. Posisjon hentes bare etter et aktivt klikk. Valgt sted kan
-mellomlagres i `sessionStorage` i maksimalt 30 minutter; GPS-koordinater avrundes
-til tre desimaler før lagring. Valgt lyst/mørkt tema lagres lokalt som en
-visningspreferanse. Eldre Værvakt-lagring, med unntak av temavalget og den
-kortvarige stedscachen, og service worker-cache ryddes bort ved oppstart.
+sporingsverktøy. Posisjon hentes bare etter et aktivt klikk og brukes bare i
+minnet mens siden er åpen. Valgt lyst/mørkt tema lagres lokalt som en
+visningspreferanse. Eldre Værvakt-lagring, med unntak av temavalget, og service
+worker-cache ryddes bort ved oppstart.
 
 Produksjons-API-et håndhever egne slettetider og dataminimering for lokale
 rapporter og innsendinger til Yr. Se personvernpanelet i appen for formål,
