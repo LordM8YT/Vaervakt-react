@@ -78,6 +78,7 @@ jobs:
           set -eu
 
           rm -rf "${PROD_DIR}/static"
+          rm -rf "${PROD_DIR}/glimt"
           cp -a "${BUILD_DIR}/static" "${PROD_DIR}/static"
 
           for file in asset-manifest.json index.html manifest.json robots.txt service-worker.js weather.ico weather.png; do
@@ -91,18 +92,8 @@ jobs:
           const path = require("path");
 
           const indexPath = path.join(process.env.PROD_DIR, "index.html");
-          const enhancement = '<script defer="defer" src="/assets/js/live-enhancements.js?v=11"></script>';
-          let html = fs.readFileSync(indexPath, "utf8");
-
-          if (!html.includes("/assets/js/live-enhancements.js")) {
-            html = html.replace(
-              /(<script type="module"[^>]*src="\/static\/js\/)/,
-              `${enhancement}$1`,
-            );
-          }
-
-          fs.writeFileSync(indexPath, html);
-          for (const route of ["lokalt", "bad", "glimt"]) {
+          const html = fs.readFileSync(indexPath, "utf8");
+          for (const route of ["lokalt", "bad"]) {
             const routeDirectory = path.join(process.env.PROD_DIR, route);
             fs.mkdirSync(routeDirectory, { recursive: true });
             fs.writeFileSync(path.join(routeDirectory, "index.html"), html);
@@ -119,7 +110,8 @@ jobs:
           git config user.email "actions@github.com"
 
           git add asset-manifest.json index.html manifest.json robots.txt service-worker.js weather.ico weather.png static
-          git add lokalt/index.html bad/index.html glimt/index.html
+          git add lokalt/index.html bad/index.html
+          git add -A glimt
 
           if git diff --cached --quiet; then
             echo "Production repo already has this Svelte build."

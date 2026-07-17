@@ -6,18 +6,20 @@
     HeartHandshake,
     LocateFixed,
     MapPin,
+    Moon,
     RefreshCw,
+    ShieldCheck,
+    Sun,
     TriangleAlert,
     Waves,
-    Zap,
   } from "@lucide/svelte";
   import Logo from "./assets/logo3.png";
   import { fetchWeatherData, reverseGeocode } from "./api/OpenWeatherService";
-  import { trackVisit } from "./api/VaervaktApi";
   import { ALL_DESCRIPTIONS } from "./utilities/DateConstants";
   import { getTodayForecastWeather, getWeekForecastWeather } from "./utilities/DataUtils";
   import { getLocalDatetime } from "./utilities/DatetimeUtils";
-  import CommunityFeatures from "./components/svelte/CommunityFeatures.svelte";
+  import LocalFeatures from "./components/svelte/LocalFeatures.svelte";
+  import PrivacyNotice from "./components/svelte/PrivacyNotice.svelte";
   import Search from "./components/svelte/Search.svelte";
   import TodayWeather from "./components/svelte/TodayWeather.svelte";
   import WeeklyForecast from "./components/svelte/WeeklyForecast.svelte";
@@ -26,53 +28,18 @@
     { value: "weather", label: "Vær", path: "/" },
     { value: "local", label: "Lokalt", path: "/lokalt/" },
     { value: "bath", label: "Bad", path: "/bad/" },
-    { value: "glimpse", label: "Glimt", path: "/glimt/" },
   ];
   const VIPPS_URL = "https://betal.vipps.no/opy01u";
   const PULL_TRIGGER_DISTANCE = 74;
   const PULL_MAX_DISTANCE = 96;
-  const LOCATION_KEY = "vaervakt_selected_location";
+  const TARGET_ACCURACY_METERS = 150;
+  const MAX_ACCEPTABLE_ACCURACY_METERS = 5000;
   const DEFAULT_LOCATION = {
     name: "Kristiansand, NO",
     lat: 58.1467,
     lon: 7.9956,
     source: "default",
   };
-
-  function getStoredLocation() {
-    try {
-      const stored = JSON.parse(window.localStorage.getItem(LOCATION_KEY));
-      const lat = Number(stored?.lat);
-      const lon = Number(stored?.lon);
-      if (
-        !stored?.name ||
-        stored?.lat === "" ||
-        stored?.lon === "" ||
-        !Number.isFinite(lat) ||
-        !Number.isFinite(lon) ||
-        lat < -90 ||
-        lat > 90 ||
-        lon < -180 ||
-        lon > 180
-      ) {
-        return DEFAULT_LOCATION;
-      }
-      return { name: stored.name, lat, lon, source: "stored" };
-    } catch {
-      return DEFAULT_LOCATION;
-    }
-  }
-
-  function storeLocation(location) {
-    try {
-      window.localStorage.setItem(
-        LOCATION_KEY,
-        JSON.stringify({ name: location.name, lat: location.lat, lon: location.lon })
-      );
-    } catch {
-      // Nettsiden fungerer også uten lokal lagring.
-    }
-  }
 
   function isBathSeason(date = new Date()) {
     const month = date.getMonth();
@@ -84,17 +51,82 @@
     return APP_TABS.find((tab) => tab.path === normalizedPath)?.value || "weather";
   }
 
-  function requestBestPosition({ timeout = 10000 } = {}) {
+  function isKnownTabPath(pathname = window.location.pathname) {
+    const normalizedPath = pathname.endsWith("/") ? pathname : `${pathname}/`;
+    return APP_TABS.some((tab) => tab.path === normalizedPath);
+  }
+
+  function getInitialTheme() {
+    return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  }
+
+  function requestBestPosition({
+    timeout = 14000,
+    targetAccuracy = TARGET_ACCURACY_METERS,
+    maxAcceptableAccuracy = MAX_ACCEPTABLE_ACCURACY_METERS,
+  } = {}) {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
         reject(new Error("unsupported"));
         return;
       }
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
+
+      let bestPosition = null;
+      let lastError = null;
+      let watchId = null;
+      let timerId = null;
+      let settled = false;
+
+      const finish = (error, position) => {
+        if (settled) return;
+        settled = true;
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        if (timerId !== null) window.clearTimeout(timerId);
+        if (error) reject(error);
+        else resolve(position);
+      };
+
+      const acceptPosition = (position) => {
+        const latitude = Number(position.coords?.latitude);
+        const longitude = Number(position.coords?.longitude);
+        const accuracy = Number(position.coords?.accuracy);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+
+        if (
+          !bestPosition ||
+          (Number.isFinite(accuracy) &&
+            accuracy < Number(bestPosition.coords?.accuracy ?? Infinity))
+        ) {
+          bestPosition = position;
+        }
+
+        if (Number.isFinite(accuracy) && accuracy <= targetAccuracy) {
+          finish(null, position);
+        }
+      };
+
+      const handleError = (error) => {
+        lastError = error;
+        if (error?.code === 1 || error?.message === "unsupported") finish(error);
+      };
+
+      watchId = navigator.geolocation.watchPosition(acceptPosition, handleError, {
         enableHighAccuracy: true,
         timeout,
         maximumAge: 0,
       });
+
+      timerId = window.setTimeout(() => {
+        const accuracy = Number(bestPosition?.coords?.accuracy);
+        if (bestPosition && Number.isFinite(accuracy) && accuracy <= maxAcceptableAccuracy) {
+          finish(null, bestPosition);
+          return;
+        }
+
+        const error = new Error(bestPosition ? "inaccurate" : "timeout");
+        error.accuracy = Number.isFinite(accuracy) ? accuracy : null;
+        finish(lastError?.code === 1 ? lastError : error);
+      }, timeout);
     });
   }
 
@@ -105,7 +137,21 @@
     if (error?.code === 3 || error?.message === "timeout") {
       return "Posisjon brukte for lang tid. Prøv igjen eller søk.";
     }
+    if (error?.message === "inaccurate") {
+      const accuracy = Number(error.accuracy);
+      const accuracyText = Number.isFinite(accuracy)
+        ? ` (omtrent ${formatAccuracy(accuracy)})`
+        : "";
+      return `Posisjonen ble for unøyaktig${accuracyText}. Slå på presis posisjon/GPS, eller søk etter stedet.`;
+    }
     return "Kunne ikke hente posisjon. Søk etter sted i stedet.";
+  }
+
+  function formatAccuracy(accuracy) {
+    if (!Number.isFinite(Number(accuracy))) return "ukjent nøyaktighet";
+    const meters = Number(accuracy);
+    if (meters < 1000) return `${Math.max(1, Math.round(meters))} m`;
+    return `${(meters / 1000).toFixed(1).replace(".", ",")} km`;
   }
 
   let activeTab = getTabFromPath();
@@ -117,7 +163,9 @@
   let hasError = false;
   let locationStatus = "";
   let communityRefreshKey = 0;
-  let selectedLocation = getStoredLocation();
+  let selectedLocation = DEFAULT_LOCATION;
+  let theme = getInitialTheme();
+  let isPrivacyOpen = false;
   let localDatetime = getLocalDatetime();
   let pullDistance = 0;
   let isRefreshing = false;
@@ -128,17 +176,22 @@
     (tab) => tab.value !== "bath" || isBathSeason() || activeTab === "bath"
   );
   $: pullProgress = Math.min(1, pullDistance / PULL_TRIGGER_DISTANCE);
-  $: communityHint = isBathSeason()
-    ? "lokale rapporter, badetemperatur og Værglimt"
-    : "lokale rapporter og Værglimt";
+  $: communityHint = isBathSeason() ? "lokale rapporter og badetemperatur" : "lokale rapporter";
+  $: document.documentElement.dataset.theme = theme;
 
-  async function searchChangeHandler(enteredData, showLoading = true, source = "search") {
+  async function searchChangeHandler(
+    enteredData,
+    showLoading = true,
+    source = "search",
+    accuracy = null
+  ) {
     if (!enteredData?.value) return;
     const [latitude, longitude] = enteredData.value.split(" ");
     const nextLocation = {
       name: enteredData.label,
       lat: Number(latitude),
       lon: Number(longitude),
+      accuracy,
       source,
     };
 
@@ -151,7 +204,6 @@
       todayForecast = getTodayForecastWeather(weekResponse, now);
       todayWeather = { city: enteredData.label, ...todayResponse };
       selectedLocation = nextLocation;
-      storeLocation(nextLocation);
       weekForecast = {
         city: enteredData.label,
         list: getWeekForecastWeather(weekResponse, ALL_DESCRIPTIONS),
@@ -161,6 +213,10 @@
     } finally {
       isLoading = false;
     }
+  }
+
+  function toggleTheme() {
+    theme = theme === "dark" ? "light" : "dark";
   }
 
   function changeTab(tabValue) {
@@ -180,6 +236,10 @@
       locationStatus = "Nettleseren støtter ikke posisjon.";
       return;
     }
+    if (!window.isSecureContext) {
+      locationStatus = "Posisjon krever HTTPS. Søk etter sted i stedet.";
+      return;
+    }
 
     isLocating = true;
     locationStatus = "";
@@ -187,8 +247,15 @@
       const position = await requestBestPosition();
       const latitude = position.coords.latitude.toFixed(7);
       const longitude = position.coords.longitude.toFixed(7);
+      const accuracy = Number(position.coords.accuracy);
       const label = await reverseGeocode(latitude, longitude).catch(() => "Din posisjon");
-      await searchChangeHandler({ value: `${latitude} ${longitude}`, label }, true, "gps");
+      await searchChangeHandler(
+        { value: `${latitude} ${longitude}`, label },
+        true,
+        "gps",
+        accuracy
+      );
+      locationStatus = `Bruker ${label} · nøyaktighet ca. ${formatAccuracy(accuracy)}.`;
     } catch (error) {
       locationStatus = getPositionStatusMessage(error);
     } finally {
@@ -205,21 +272,26 @@
           label: selectedLocation.name,
         },
         true,
-        selectedLocation.source || "refresh"
+        selectedLocation.source || "refresh",
+        selectedLocation.accuracy || null
       );
     }
     communityRefreshKey += 1;
   }
 
   onMount(() => {
-    trackVisit();
+    if (!isKnownTabPath()) {
+      window.history.replaceState({ tab: "weather" }, "", "/");
+      activeTab = "weather";
+    }
     searchChangeHandler(
       {
         value: `${selectedLocation.lat} ${selectedLocation.lon}`,
         label: selectedLocation.name,
       },
       false,
-      selectedLocation.source || "default"
+      selectedLocation.source || "default",
+      selectedLocation.accuracy || null
     );
 
     const dateTimer = window.setInterval(() => (localDatetime = getLocalDatetime()), 30000);
@@ -278,7 +350,7 @@
   <meta property="og:title" content="Værvakt.no" />
   <meta
     property="og:description"
-    content="Lokalt vær, værrapporter, badetemperatur og værglimt."
+    content="Lokalt vær, værrapporter og badetemperatur."
   />
 </svelte:head>
 
@@ -301,6 +373,15 @@
       <a class="support-mini" href={VIPPS_URL} target="_blank" rel="noopener noreferrer">
         <HeartHandshake size={15} /> Støtt
       </a>
+      <button
+        class="theme-button"
+        type="button"
+        on:click={toggleTheme}
+        aria-label={theme === "dark" ? "Bytt til lyst tema" : "Bytt til mørkt tema"}
+        title={theme === "dark" ? "Lyst tema" : "Mørkt tema"}
+      >
+        {#if theme === "dark"}<Sun size={17} />{:else}<Moon size={17} />{/if}
+      </button>
       <button class="location-button" type="button" on:click={usePositionHandler} disabled={isLocating}>
         <LocateFixed size={16} class={isLocating ? "locating" : ""} />
         <span>{isLocating ? "Finner…" : "Bruk posisjon"}</span>
@@ -308,7 +389,7 @@
       <time class="current-time">{localDatetime}</time>
       <a
         class="github-link"
-        href="https://github.com/LordM8YT/Vaervakt-react"
+        href="https://github.com/LordM8YT/Vaervakt-svelte"
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Værvakt på GitHub"
@@ -318,9 +399,7 @@
     </div>
   </header>
 
-  {#if activeTab !== "glimpse"}
-    <Search onSelect={searchChangeHandler} />
-  {/if}
+  <Search onSelect={searchChangeHandler} />
 
   {#if locationStatus}
     <div class="location-status" role="status">
@@ -352,11 +431,12 @@
         </div>
         <div class="tab-hint">Bytt fane nederst for {communityHint}.</div>
       {:else}
-        <CommunityFeatures
+        <LocalFeatures
           {selectedLocation}
           weather={todayWeather}
           {activeTab}
           refreshKey={communityRefreshKey}
+          onOpenPrivacy={() => (isPrivacyOpen = true)}
         />
       {/if}
     {:else}
@@ -366,6 +446,14 @@
       </div>
     {/if}
   </main>
+
+  <footer class="privacy-footer">
+    <button type="button" on:click={() => (isPrivacyOpen = true)}>
+      <ShieldCheck size={16} />
+      Personvern
+    </button>
+    <span>Ingen annonser eller individuell besøksmåling.</span>
+  </footer>
 
   <nav
     class="bottom-nav"
@@ -385,11 +473,13 @@
           <MapPin size={18} />
         {:else if tab.value === "bath"}
           <Waves size={18} />
-        {:else}
-          <Zap size={18} />
         {/if}
         <span>{tab.label}</span>
       </button>
     {/each}
   </nav>
 </div>
+
+{#if isPrivacyOpen}
+  <PrivacyNotice onClose={() => (isPrivacyOpen = false)} />
+{/if}

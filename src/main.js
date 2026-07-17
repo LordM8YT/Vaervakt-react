@@ -6,13 +6,39 @@ const app = mount(App, {
   target: document.getElementById("app"),
 });
 
-if ("serviceWorker" in navigator && import.meta.env.PROD) {
-  window.addEventListener("load", () => {
+function removeLegacyClientData() {
+  try {
+    Object.keys(window.localStorage)
+      .filter((key) => key.startsWith("vaervakt_"))
+      .forEach((key) => window.localStorage.removeItem(key));
+    Object.keys(window.sessionStorage)
+      .filter((key) => key.startsWith("vaervakt_"))
+      .forEach((key) => window.sessionStorage.removeItem(key));
+  } catch {
+    // Opprydding kan være blokkert i strenge/private nettlesermoduser.
+  }
+
+  if ("serviceWorker" in navigator) {
     navigator.serviceWorker
-      .register("/service-worker.js", { updateViaCache: "none" })
-      .then((registration) => registration.update().catch(() => {}))
+      .getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((item) => item.unregister())))
       .catch(() => {});
-  });
+  }
+
+  if ("caches" in window) {
+    window.caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key.toLowerCase().includes("vaervakt"))
+            .map((key) => window.caches.delete(key))
+        )
+      )
+      .catch(() => {});
+  }
 }
+
+removeLegacyClientData();
 
 export default app;
