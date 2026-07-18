@@ -82,6 +82,18 @@ export function submitReport(report) {
   });
 }
 
+export function flagReport(reportId, reason, details = "") {
+  return requestJson("/api/reports.php", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "flag",
+      reportId,
+      reason,
+      details,
+    }),
+  });
+}
+
 export function submitBathTemperature(report) {
   return requestJson("/api/bath-reports.php", {
     method: "POST",

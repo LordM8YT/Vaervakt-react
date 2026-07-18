@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import {
     CheckCircle2,
+    Flag,
     LoaderCircle,
     MapPin,
     RefreshCw,
@@ -13,6 +14,7 @@
   import {
     fetchBathTemperatures,
     fetchReports,
+    flagReport,
     submitBathTemperature,
     submitReport,
   } from "../../api/VaervaktApi";
@@ -40,6 +42,13 @@
     { value: "Regn", label: "Regn", kind: "rain" },
     { value: "Snø", label: "Snø", kind: "snow" },
     { value: "Torden", label: "Torden", kind: "thunder" },
+  ];
+  const REPORT_FLAG_REASONS = [
+    { value: "inaccurate", label: "Feil værdata" },
+    { value: "spam", label: "Spam eller reklame" },
+    { value: "abusive", label: "Upassende innhold" },
+    { value: "privacy", label: "Personopplysninger" },
+    { value: "other", label: "Annet" },
   ];
 
   function getBathPoiCacheLocationKey(lat, lon) {
@@ -190,6 +199,8 @@
   }
 
   let reports = [];
+  let flaggingReportId = null;
+  let flaggedReportIds = [];
   let isLoading = false;
   let notice = null;
   let reportForm = {
@@ -369,6 +380,32 @@
     }
   }
 
+  async function handleFlagReport(reportId, reason) {
+    if (flaggedReportIds.includes(reportId)) return;
+
+    try {
+      flaggingReportId = reportId;
+      const result = await flagReport(reportId, reason);
+      flaggedReportIds = [...flaggedReportIds, reportId];
+      notice = {
+        severity: "success",
+        text: result.message || "Takk. Rapporten er sendt til vurdering.",
+      };
+      if (result.hidden) {
+        reports = reports.filter((report) => report.id !== reportId);
+        reportMeta = {
+          ...reportMeta,
+          total: Math.max(0, reportMeta.total - 1),
+          displayed: Math.max(0, reportMeta.displayed - 1),
+        };
+      }
+    } catch (error) {
+      notice = { severity: "error", text: error.message };
+    } finally {
+      flaggingReportId = null;
+    }
+  }
+
   async function handleBathSubmit() {
     const temperature = normalizeTemp(bathForm.temperature);
     const name = bathForm.name.trim();
@@ -537,6 +574,28 @@
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
+                <details class="report-flag">
+                  <summary>
+                    <Flag size={12} aria-hidden="true" />
+                    {flaggedReportIds.includes(report.id) ? "Rapportert" : "Rapporter feil"}
+                  </summary>
+                  <div class="report-flag-menu">
+                    {#if flaggedReportIds.includes(report.id)}
+                      <span>Takk – sendt til vurdering.</span>
+                    {:else}
+                      <strong>Hva er galt?</strong>
+                      {#each REPORT_FLAG_REASONS as reason}
+                        <button
+                          type="button"
+                          disabled={flaggingReportId === report.id}
+                          on:click={() => handleFlagReport(report.id, reason.value)}
+                        >
+                          {reason.label}
+                        </button>
+                      {/each}
+                    {/if}
+                  </div>
+                </details>
               </div>
               <b>{formatTemperature(report.temp)}°</b>
             </article>

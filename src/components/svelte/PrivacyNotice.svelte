@@ -80,8 +80,10 @@
         <p>
           En rapport kan inneholde valgfritt visningsnavn, værtype, temperatur, sted og
           grovt avrundede koordinater. Rapporten vises offentlig i inntil 7 dager.
-          Koordinatene vises ikke i det offentlige API-et. Et kortvarig, pseudonymt
-          sikkerhetshash kan oppbevares i maksimalt 60 minutter for å begrense spam.
+          Den kan oppbevares i maksimalt 30 dager for moderering før automatisk sletting.
+          Koordinatene vises ikke i det offentlige API-et. Et pseudonymt sikkerhetshash
+          brukes til å begrense spam og hindre gjentatt misbruksrapportering fra samme
+          klient. IP-adressen lagres ikke i klartekst i denne funksjonen.
           Grunnlaget er vår berettigede interesse i å tilby og beskytte lokale rapporter,
           jf. artikkel 6 nr. 1 bokstav f. Ikke bruk fullt navn eller skriv sensitive
           opplysninger.

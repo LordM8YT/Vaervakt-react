@@ -1,15 +1,28 @@
 {
   "name": "vaervakt-streamdeck",
-  "version": "0.3.8",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "Stream Deck-plugin for Værvakt.no.",
+  "description": "Svelte-basert Stream Deck-plugin for Værvakt.no.",
   "scripts": {
-    "build": "node -e \"console.log('Classic Stream Deck plugin: no build step needed')\"",
-    "pack": "streamdeck pack no.vaervakt.streamdeck.sdPlugin --force"
+    "dev": "vite",
+    "check": "svelte-check --output human",
+    "build": "vite build",
+    "validate": "streamdeck validate no.vaervakt.streamdeck.sdPlugin --no-update-check",
+    "pack": "streamdeck pack no.vaervakt.streamdeck.sdPlugin --force --no-update-check"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@lucide/svelte": "^1.25.0",
+    "svelte": "^5.56.6"
+  },
   "devDependencies": {
-    "@elgato/cli": "^1.7.4"
+    "@elgato/cli": "^1.7.4",
+    "@sveltejs/vite-plugin-svelte": "^7.2.0",
+    "svelte-check": "^4.7.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.1.5"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

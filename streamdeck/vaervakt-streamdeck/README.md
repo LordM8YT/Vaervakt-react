@@ -1,59 +1,39 @@
 # Værvakt Stream Deck
 
-En liten Stream Deck-plugin for Værvakt.no.
+Stream Deck-plugin for Værvakt.no, bygget med Svelte 5, Vite og Lucide.
 
-## Hva den gjør
+## Handlinger
 
-- `Værvakt Nå`: viser temperatur, værikon, sted og eventuell nærmeste badetemperatur.
-- `Badetemp`: viser nærmeste badetemperatur fra Yr via Værvakt sitt API.
-- `Badetemp info`: viser badeplass, avstand og tidspunkt. Plasser den rett ved siden av `Badetemp` for en todelt badetemp-widget.
-- `Siste rapport`: viser siste lokale værrapport i nærheten.
-- `Send rapport`: sender en hurtigrapport med valgt værtype og aktuell temperatur.
-- `Åpne Værvakt`: åpner Værvakt.no i nettleseren.
-- De fleste visningsknapper kan åpne riktig Værvakt-side ved trykk. `Send rapport` sender en hurtigrapport i stedet.
-- Property Inspector lar deg sette sted, koordinater, API-base og oppdateringsintervall.
+- `Værvakt nå` viser temperatur, værstatus og sted. Værdata hentes direkte fra MET.
+- `Badetemp` viser nærmeste eller valgt badetemperatur fra Værvakt.
+- `Badetemp info` viser badeplass, avstand og tidspunkt.
+- `Siste rapport` viser siste lokale værrapport i nærheten.
+- `Send rapport` sender en hurtigrapport med aktuell temperatur.
+- `Åpne Værvakt` åpner nettsiden.
 
-Anbefalt layout på Stream Deck:
+Property Inspector er en Svelte-app med konteksttilpassede innstillinger for hver
+handling. Knappgrafikken rendres også med Svelte og Lucide.
 
-```text
-[Værvakt Nå] [Siste rapport] [Åpne Værvakt]
-[Badetemp]  [Badetemp info] [Send rapport]
-```
+## Utvikling
 
-## Struktur
-
-Pluginen bruker klassisk Stream Deck JavaScript med `connectElgatoStreamDeckSocket` i:
-
-```text
-no.vaervakt.streamdeck.sdPlugin/plugin.js
-```
-
-Den bruker ikke React, TypeScript eller Elgato Node SDK-runtime.
-
-## Krav
-
-- Stream Deck 7.1 eller nyere.
-- Stream Deck CLI hvis du vil pakke pluginen til installasjonsfil.
-
-## Bruk
+All redigerbar kildekode ligger direkte i denne mappen. Vite bygger filene inn i
+den eksisterende `no.vaervakt.streamdeck.sdPlugin`-pakken.
 
 ```powershell
 npm install
+npm run check
 npm run build
+npm run validate
 npm run pack
 ```
 
-Den byggede pluginen ligger i:
+Den installerbare filen heter:
 
 ```text
-no.vaervakt.streamdeck.sdPlugin
+no.vaervakt.streamdeck.streamDeckPlugin
 ```
 
-## Standardsted
+## Krav
 
-Pluginen starter på Kristiansand:
-
-- Lat: `58.1467`
-- Lon: `7.9956`
-
-Dette kan endres per knapp i Stream Deck sin Property Inspector.
+- Node.js 22.12 eller nyere for utvikling.
+- Stream Deck 7.1 eller nyere for bruk.
