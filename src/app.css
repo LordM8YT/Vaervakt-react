@@ -1228,6 +1228,78 @@ main {
   white-space: nowrap;
 }
 
+.report-flag {
+  position: relative;
+  align-self: flex-start;
+}
+
+.report-flag summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 0.64rem;
+  font-weight: 750;
+  cursor: pointer;
+  list-style: none;
+}
+
+.report-flag summary::-webkit-details-marker {
+  display: none;
+}
+
+.report-flag summary:hover,
+.report-flag[open] summary {
+  color: #7dd3fc;
+}
+
+.report-flag-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 7px);
+  left: 0;
+  display: grid;
+  width: max-content;
+  min-width: 190px;
+  max-width: min(260px, 72vw);
+  gap: 5px;
+  padding: 9px;
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  border-radius: 13px;
+  background: rgba(5, 12, 28, 0.98);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.36);
+}
+
+.report-flag-menu > strong,
+.report-flag-menu > span {
+  padding: 4px 6px;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.68rem;
+}
+
+.report-flag-menu button {
+  min-height: 31px;
+  padding: 0 8px;
+  color: rgba(255, 255, 255, 0.74);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.7rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.report-flag-menu button:hover {
+  color: white;
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.report-flag-menu button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .list-card > b {
   flex: 0 0 auto;
   color: white;
@@ -2023,6 +2095,32 @@ html[data-theme="light"] .refresh-warning {
   background: rgba(251, 191, 36, 0.12);
 }
 
+html[data-theme="light"] .report-flag summary {
+  color: #64748b;
+}
+
+html[data-theme="light"] .report-flag summary:hover,
+html[data-theme="light"] .report-flag[open] summary {
+  color: #0369a1;
+}
+
+html[data-theme="light"] .report-flag-menu {
+  border-color: rgba(2, 132, 199, 0.18);
+  background: rgba(255, 255, 255, 0.99);
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.18);
+}
+
+html[data-theme="light"] .report-flag-menu > strong,
+html[data-theme="light"] .report-flag-menu > span,
+html[data-theme="light"] .report-flag-menu button {
+  color: #334155;
+}
+
+html[data-theme="light"] .report-flag-menu button:hover {
+  color: #0f172a;
+  background: rgba(14, 165, 233, 0.1);
+}
+
 .privacy-footer {
   display: flex;
   align-items: center;
@@ -2455,6 +2553,23 @@ html[data-theme="light"] .privacy-links a {
 
   .support-button {
     width: 100%;
+  }
+
+  .report-flag {
+    width: 100%;
+  }
+
+  .report-card:has(.report-flag[open]) {
+    align-items: flex-start;
+  }
+
+  .report-flag-menu {
+    position: static;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    margin-top: 7px;
+    box-sizing: border-box;
   }
 
   .privacy-footer {
