@@ -143,7 +143,7 @@
 
     <div class="location-privacy-note">
       <ShieldCheck size={18} aria-hidden="true" />
-      <span>Stedet lagres bare lokalt på denne enheten. GPS reduseres i presisjon før lagring.</span>
+      <span>GPS-posisjonen lagres med full nettleserpresisjon bare på denne enheten.</span>
     </div>
   </div>
 </div>

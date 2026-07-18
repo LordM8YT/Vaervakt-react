@@ -17,6 +17,7 @@
   import { ALL_DESCRIPTIONS } from "./utilities/DateConstants";
   import { getTodayForecastWeather, getWeekForecastWeather } from "./utilities/DataUtils";
   import { getLocalDatetime } from "./utilities/DatetimeUtils";
+  import { createCachedLocation } from "./utilities/LocationCache";
   import AppToast from "./components/svelte/AppToast.svelte";
   import BottomNav from "./components/svelte/BottomNav.svelte";
   import ForecastSkeleton from "./components/svelte/ForecastSkeleton.svelte";
@@ -36,12 +37,10 @@
   const VIPPS_URL = "https://betal.vipps.no/opy01u";
   const PULL_TRIGGER_DISTANCE = 74;
   const PULL_MAX_DISTANCE = 96;
-  const TARGET_ACCURACY_METERS = 150;
+  const TARGET_ACCURACY_METERS = 25;
   const MAX_ACCEPTABLE_ACCURACY_METERS = 3000;
-  const POSITION_ACQUISITION_TIMEOUT_MS = 8000;
+  const POSITION_ACQUISITION_TIMEOUT_MS = 12000;
   const POSITION_TOAST_DURATION_MS = 5000;
-  const GPS_CACHE_COORDINATE_DECIMALS = 3;
-  const GPS_CACHE_MIN_ACCURACY_METERS = 150;
   const THEME_STORAGE_KEY = "vaervakt_theme";
   const SELECTED_LOCATION_KEY = "vaervakt_selected_location";
   const BATH_POI_CACHE_KEY = "vaervakt_bath_poi_cache_v1";
@@ -77,43 +76,6 @@
     } catch {
       // Temaet fungerer fortsatt i denne fanen når lokal lagring er blokkert.
     }
-  }
-
-  function createCachedLocation(location, preserveTimestamp = false) {
-    const name = String(location?.name || "").trim().slice(0, 160);
-    const lat = Number(location?.lat);
-    const lon = Number(location?.lon);
-    if (
-      !name ||
-      !Number.isFinite(lat) ||
-      !Number.isFinite(lon) ||
-      lat < -90 ||
-      lat > 90 ||
-      lon < -180 ||
-      lon > 180
-    ) {
-      return null;
-    }
-
-    const isGps = location.source === "gps";
-    const decimals = isGps ? GPS_CACHE_COORDINATE_DECIMALS : 5;
-    const accuracy = Number(location.accuracy);
-    const cachedAt = Number(location.cachedAt);
-    return {
-      name,
-      lat: Number(lat.toFixed(decimals)),
-      lon: Number(lon.toFixed(decimals)),
-      accuracy: Number.isFinite(accuracy)
-        ? isGps
-          ? Math.max(Math.round(accuracy), GPS_CACHE_MIN_ACCURACY_METERS)
-          : Math.round(accuracy)
-        : null,
-      source: isGps ? "gps" : "search",
-      cachedAt:
-        preserveTimestamp && Number.isFinite(cachedAt) && cachedAt > 0
-          ? cachedAt
-          : Date.now(),
-    };
   }
 
   function loadSelectedLocation() {
@@ -449,8 +411,8 @@
     needsManualPlaceSelection = false;
     try {
       const position = await requestBestPosition();
-      const latitude = position.coords.latitude.toFixed(7);
-      const longitude = position.coords.longitude.toFixed(7);
+      const latitude = Number(position.coords.latitude);
+      const longitude = Number(position.coords.longitude);
       const accuracy = Number(position.coords.accuracy);
       const label = await reverseGeocode(latitude, longitude).catch(() => "Din posisjon");
       if (locationLoadSequence !== locationSequenceAtStart) return;
@@ -463,7 +425,7 @@
       if (!isCurrentLocation) return;
       locationStatus = "";
       showToast(
-        `Bruker ${label} · nøyaktighet ca. ${formatAccuracy(accuracy)}.`,
+        `Bruker ${label} · GPS ± ${formatAccuracy(accuracy)}.`,
         "success",
         POSITION_TOAST_DURATION_MS
       );

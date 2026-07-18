@@ -67,7 +67,9 @@
           GPS brukes bare når du trykker «Bruk posisjon» og godkjenner i nettleseren.
           Koordinatene brukes til å hente vær og finne stedsnavn. Det valgte stedet
           caches lokalt på enheten, slik at det kan brukes igjen ved neste besøk.
-          GPS-koordinater avrundes til tre desimaler før de skrives til denne cachen.
+          GPS-koordinater beholdes med full presisjon fra nettleseren i denne lokale
+          cachen. De fjernes når du velger «Glem lagret sted» eller sletter
+          nettleserdata. Værvakt lagrer ikke denne stedscachen på serveren.
           Stedssøk og reserveoppslag går via OpenStreetMap Nominatim. Værdata hentes fra
           Meteorologisk institutt, og norske stedsnavn kan slås opp via
           Kartverket/Geonorge. Grunnlaget er å levere tjenesten du ber om, jf. GDPR
