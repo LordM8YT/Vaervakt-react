@@ -1,27 +1,30 @@
 <script>
   import { onMount, onDestroy } from "svelte";
   import {
-    CloudSun,
+    ChevronRight,
     Code2,
     HeartHandshake,
-    LocateFixed,
     MapPin,
     Moon,
-    RefreshCw,
     Search as SearchIcon,
     ShieldCheck,
     Sun,
     TriangleAlert,
-    Waves,
+    WifiOff,
   } from "@lucide/svelte";
   import Logo from "./assets/logo3.png";
   import { fetchWeatherData, reverseGeocode } from "./api/OpenWeatherService";
   import { ALL_DESCRIPTIONS } from "./utilities/DateConstants";
   import { getTodayForecastWeather, getWeekForecastWeather } from "./utilities/DataUtils";
   import { getLocalDatetime } from "./utilities/DatetimeUtils";
+  import AppToast from "./components/svelte/AppToast.svelte";
+  import BottomNav from "./components/svelte/BottomNav.svelte";
+  import ForecastSkeleton from "./components/svelte/ForecastSkeleton.svelte";
   import LocalFeatures from "./components/svelte/LocalFeatures.svelte";
+  import LocationPanel from "./components/svelte/LocationPanel.svelte";
   import PrivacyNotice from "./components/svelte/PrivacyNotice.svelte";
   import Search from "./components/svelte/Search.svelte";
+  import StartExperience from "./components/svelte/StartExperience.svelte";
   import TodayWeather from "./components/svelte/TodayWeather.svelte";
   import WeeklyForecast from "./components/svelte/WeeklyForecast.svelte";
 
@@ -41,6 +44,7 @@
   const GPS_CACHE_MIN_ACCURACY_METERS = 150;
   const THEME_STORAGE_KEY = "vaervakt_theme";
   const SELECTED_LOCATION_KEY = "vaervakt_selected_location";
+  const BATH_POI_CACHE_KEY = "vaervakt_bath_poi_cache_v1";
 
   function isBathSeason(date = new Date()) {
     const month = date.getMonth();
@@ -246,6 +250,20 @@
     return `${(meters / 1000).toFixed(1).replace(".", ",")} km`;
   }
 
+  function formatLocationAge(timestamp) {
+    const storedAt = Number(timestamp);
+    if (!Number.isFinite(storedAt) || storedAt <= 0) return "";
+    const ageMinutes = Math.max(0, Math.floor((Date.now() - storedAt) / 60000));
+    if (ageMinutes < 1) return "lagret akkurat nå";
+    if (ageMinutes < 60) return `lagret for ${ageMinutes} min siden`;
+    const ageHours = Math.floor(ageMinutes / 60);
+    if (ageHours < 24) return `lagret for ${ageHours} t siden`;
+    return `lagret ${new Intl.DateTimeFormat("nb-NO", {
+      day: "numeric",
+      month: "short",
+    }).format(new Date(storedAt))}`;
+  }
+
   function showToast(message, type = "info", duration = 3500) {
     if (!message) return;
     toastMessage = message;
@@ -280,6 +298,7 @@
   let selectedLocation = null;
   let theme = getInitialTheme();
   let isPrivacyOpen = false;
+  let isLocationPanelOpen = false;
   let localDatetime = getLocalDatetime();
   let pullDistance = 0;
   let isRefreshing = false;
@@ -305,6 +324,12 @@
           ? "Lagret søk"
           : "Søk"
         : "";
+  $: selectedLocationAge = formatLocationAge(selectedLocation?.cachedAt);
+  $: isLocationMismatch =
+    Boolean(todayWeather?.city) &&
+    Boolean(selectedLocation?.name) &&
+    todayWeather.city !== selectedLocation.name;
+  $: shouldShowSkeleton = isLoading && (!todayWeather || isLocationMismatch);
   $: document.documentElement.dataset.theme = theme;
 
   async function searchChangeHandler(
@@ -325,6 +350,7 @@
       accuracy,
       source,
       cached,
+      cachedAt: Date.now(),
     };
 
     selectedLocation = nextLocation;
@@ -358,6 +384,41 @@
 
   function focusPlaceSearch() {
     placeSearch?.focus?.();
+  }
+
+  function searchFromLocationPanel() {
+    isLocationPanelOpen = false;
+    window.setTimeout(() => focusPlaceSearch(), 180);
+  }
+
+  async function locateFromLocationPanel() {
+    isLocationPanelOpen = false;
+    await usePositionHandler();
+  }
+
+  function forgetSelectedLocation() {
+    locationLoadSequence += 1;
+    persistSelectedLocation(null);
+    try {
+      window.localStorage.removeItem(BATH_POI_CACHE_KEY);
+    } catch {
+      // Stedet fjernes fortsatt fra denne fanen.
+    }
+    selectedLocation = null;
+    todayWeather = null;
+    todayForecast = [];
+    weekForecast = null;
+    hasError = false;
+    locationStatus = "";
+    needsManualPlaceSelection = false;
+    communityRefreshKey += 1;
+    isLocationPanelOpen = false;
+    placeSearch?.clear?.();
+    if (window.location.pathname !== "/") {
+      window.history.pushState({ tab: "weather" }, "", "/");
+    }
+    activeTab = "weather";
+    showToast("Det lagrede stedet er fjernet.", "info");
   }
 
   function changeTab(tabValue) {
@@ -539,9 +600,15 @@
       >
         {#if theme === "dark"}<Sun size={17} />{:else}<Moon size={17} />{/if}
       </button>
-      <button class="location-button" type="button" on:click={usePositionHandler} disabled={isLocating}>
-        <LocateFixed size={16} class={isLocating ? "locating" : ""} />
-        <span>{isLocating ? "Finner…" : "Bruk posisjon"}</span>
+      <button
+        class="location-button"
+        type="button"
+        on:click={() => (isLocationPanelOpen = true)}
+        aria-haspopup="dialog"
+        aria-label={selectedLocation ? `Administrer sted: ${selectedLocation.name}` : "Velg sted"}
+      >
+        <MapPin size={16} />
+        <span>{selectedLocation ? "Bytt sted" : "Velg sted"}</span>
       </button>
       <time class="current-time">{localDatetime}</time>
       <a
@@ -559,21 +626,28 @@
   <Search bind:this={placeSearch} onSelect={searchChangeHandler} />
 
   {#if selectedLocation}
-    <div class="selected-location" aria-live="polite">
+    <button
+      class="selected-location"
+      type="button"
+      on:click={() => (isLocationPanelOpen = true)}
+      aria-haspopup="dialog"
+      aria-label={`Administrer valgt sted: ${selectedLocation.name}`}
+    >
       <div class="selected-location-copy">
         <MapPin size={17} aria-hidden="true" />
-        <span>Valgt sted</span>
-        <strong title={selectedLocation.name}>{selectedLocation.name}</strong>
+        <div>
+          <span>Valgt sted</span>
+          <strong title={selectedLocation.name}>{selectedLocation.name}</strong>
+        </div>
       </div>
-      <span class="selected-location-source">{selectedLocationSource}</span>
-    </div>
+      <div class="selected-location-action">
+        <span class="selected-location-source">{selectedLocationSource}</span>
+        <ChevronRight size={17} aria-hidden="true" />
+      </div>
+    </button>
   {/if}
 
-  {#if toastMessage}
-    <div class={`toast toast-${toastType}`} role="status" aria-live="polite">
-      <span>{toastMessage}</span>
-    </div>
-  {/if}
+  <AppToast message={toastMessage} type={toastType} />
 
   {#if locationStatus}
     <div class="location-status" role="status">
@@ -588,13 +662,18 @@
     </div>
   {/if}
 
+  {#if hasError && todayWeather && !isLocationMismatch}
+    <div class="refresh-warning" role="status">
+      <WifiOff size={17} aria-hidden="true" />
+      <span>Kunne ikke oppdatere akkurat nå. Du ser sist hentede værdata.</span>
+      <button class="text-button" type="button" on:click={refreshActiveTab}>Prøv igjen</button>
+    </div>
+  {/if}
+
   <main>
-    {#if isLoading}
-      <div class="loading-state">
-        <RefreshCw class="spin" size={34} />
-        <strong>Laster værdata…</strong>
-      </div>
-    {:else if hasError}
+    {#if shouldShowSkeleton}
+      <ForecastSkeleton />
+    {:else if hasError && (!todayWeather || isLocationMismatch)}
       <div class="error-state">
         <TriangleAlert size={28} />
         <div>
@@ -620,10 +699,11 @@
         />
       {/if}
     {:else}
-      <div class="loading-state">
-        <CloudSun size={58} />
-        <strong>Søk etter et sted for å se været.</strong>
-      </div>
+      <StartExperience
+        onUsePosition={usePositionHandler}
+        onSearch={focusPlaceSearch}
+        {isLocating}
+      />
     {/if}
   </main>
 
@@ -638,30 +718,21 @@
     <span class="credits">Credits · Backend utviklet av Greve</span>
   </footer>
 
-  <nav
-    class="bottom-nav"
-    style={`--tab-count: ${visibleTabs.length}`}
-    aria-label="Hovedmeny"
-  >
-    {#each visibleTabs as tab}
-      <button
-        type="button"
-        class:active={activeTab === tab.value}
-        aria-pressed={activeTab === tab.value}
-        on:click={() => changeTab(tab.value)}
-      >
-        {#if tab.value === "weather"}
-          <CloudSun size={18} />
-        {:else if tab.value === "local"}
-          <MapPin size={18} />
-        {:else if tab.value === "bath"}
-          <Waves size={18} />
-        {/if}
-        <span>{tab.label}</span>
-      </button>
-    {/each}
-  </nav>
+  <BottomNav tabs={visibleTabs} {activeTab} onSelect={changeTab} />
 </div>
+
+{#if isLocationPanelOpen}
+  <LocationPanel
+    location={selectedLocation}
+    sourceLabel={selectedLocationSource}
+    ageLabel={selectedLocationAge}
+    {isLocating}
+    onClose={() => (isLocationPanelOpen = false)}
+    onUsePosition={locateFromLocationPanel}
+    onSearch={searchFromLocationPanel}
+    onForget={forgetSelectedLocation}
+  />
+{/if}
 
 {#if isPrivacyOpen}
   <PrivacyNotice onClose={() => (isPrivacyOpen = false)} />

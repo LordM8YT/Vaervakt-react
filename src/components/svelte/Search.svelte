@@ -1,5 +1,6 @@
 <script>
-  import { LoaderCircle, MapPin, Search, X } from "@lucide/svelte";
+  import { onDestroy } from "svelte";
+  import { LoaderCircle, MapPin, Search, TriangleAlert, X } from "@lucide/svelte";
   import { fetchCities } from "../../api/OpenWeatherService";
 
   export let onSelect = () => {};
@@ -10,6 +11,7 @@
   let isOpen = false;
   let activeIndex = -1;
   let requestId = 0;
+  let searchError = false;
   let debounceTimer;
   let searchInput;
 
@@ -18,16 +20,27 @@
     window.setTimeout(() => searchInput?.focus(), 180);
   }
 
+  export function clear() {
+    clearSearch();
+  }
+
+  onDestroy(() => {
+    clearTimeout(debounceTimer);
+    requestId += 1;
+  });
+
   async function runSearch(value) {
     const currentRequest = ++requestId;
     if (value.trim().length < 2) {
       options = [];
       isOpen = false;
       isLoading = false;
+      searchError = false;
       return;
     }
 
     isLoading = true;
+    searchError = false;
     try {
       const cities = await fetchCities(value);
       if (currentRequest !== requestId) return;
@@ -40,6 +53,7 @@
     } catch {
       if (currentRequest === requestId) {
         options = [];
+        searchError = true;
         isOpen = true;
       }
     } finally {
@@ -57,6 +71,7 @@
     query = option.label;
     isOpen = false;
     activeIndex = -1;
+    searchError = false;
     onSelect(option);
   }
 
@@ -65,6 +80,7 @@
     options = [];
     isOpen = false;
     activeIndex = -1;
+    searchError = false;
   }
 
   function handleKeydown(event) {
@@ -97,6 +113,7 @@
     aria-expanded={isOpen}
     aria-controls="place-results"
     aria-autocomplete="list"
+    aria-activedescendant={activeIndex >= 0 ? `place-option-${activeIndex}` : undefined}
     autocomplete="off"
     on:input={handleInput}
     on:keydown={handleKeydown}
@@ -117,6 +134,7 @@
       {#if options.length}
         {#each options as option, index}
           <button
+            id={`place-option-${index}`}
             type="button"
             role="option"
             aria-selected={index === activeIndex}
@@ -127,6 +145,8 @@
             <span>{option.label}</span>
           </button>
         {/each}
+      {:else if !isLoading && searchError}
+        <p class="search-error"><TriangleAlert size={16} /> Søket kunne ikke fullføres. Prøv igjen.</p>
       {:else if !isLoading}
         <p>Ingen steder funnet. Prøv et annet søk.</p>
       {/if}
