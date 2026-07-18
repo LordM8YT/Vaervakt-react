@@ -296,9 +296,6 @@
         total: Number.isFinite(total) ? total : reports.length,
         displayed: Number.isFinite(displayed) ? displayed : reports.length,
       };
-    } else if (activeTab === "local") {
-      reports = [];
-      reportMeta = { total: 0, displayed: 0 };
     }
 
     if (bathResult.status === "fulfilled") {
@@ -321,6 +318,8 @@
               : "Badetemperaturene kunne ikke lastes akkurat nå."
             : "Lokale rapporter kunne ikke lastes akkurat nå.",
       };
+    } else if (notice?.severity === "warning") {
+      notice = null;
     }
 
     isLoading = false;
@@ -523,7 +522,7 @@
         </form>
 
         <div class="card-list">
-          {#if reports.length === 0}
+          {#if reports.length === 0 && notice?.severity !== "warning"}
             <div class="empty-state">Ingen lokale rapporter her ennå. Bli førstemann.</div>
           {/if}
           {#each reports as report}
@@ -561,7 +560,7 @@
           <div class="empty-state">
             <LoaderCircle class="spin" size={18} /> Laster badetemperaturer…
           </div>
-        {:else if bathTemperatures.length === 0}
+        {:else if bathTemperatures.length === 0 && notice?.severity !== "warning"}
           <div class="empty-state">
             Fant ingen ferske målinger innenfor 50 km. Yr viser målinger fra de siste fem døgnene.
           </div>
