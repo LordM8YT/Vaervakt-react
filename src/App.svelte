@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import {
     CloudSun,
     Code2,
@@ -36,7 +36,11 @@
   const TARGET_ACCURACY_METERS = 150;
   const MAX_ACCEPTABLE_ACCURACY_METERS = 3000;
   const POSITION_ACQUISITION_TIMEOUT_MS = 8000;
+  const POSITION_TOAST_DURATION_MS = 5000;
+  const GPS_CACHE_COORDINATE_DECIMALS = 3;
+  const GPS_CACHE_MIN_ACCURACY_METERS = 150;
   const THEME_STORAGE_KEY = "vaervakt_theme";
+  const SELECTED_LOCATION_KEY = "vaervakt_selected_location";
 
   function isBathSeason(date = new Date()) {
     const month = date.getMonth();
@@ -68,6 +72,80 @@
       window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
     } catch {
       // Temaet fungerer fortsatt i denne fanen når lokal lagring er blokkert.
+    }
+  }
+
+  function createCachedLocation(location, preserveTimestamp = false) {
+    const name = String(location?.name || "").trim().slice(0, 160);
+    const lat = Number(location?.lat);
+    const lon = Number(location?.lon);
+    if (
+      !name ||
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lon) ||
+      lat < -90 ||
+      lat > 90 ||
+      lon < -180 ||
+      lon > 180
+    ) {
+      return null;
+    }
+
+    const isGps = location.source === "gps";
+    const decimals = isGps ? GPS_CACHE_COORDINATE_DECIMALS : 5;
+    const accuracy = Number(location.accuracy);
+    const cachedAt = Number(location.cachedAt);
+    return {
+      name,
+      lat: Number(lat.toFixed(decimals)),
+      lon: Number(lon.toFixed(decimals)),
+      accuracy: Number.isFinite(accuracy)
+        ? isGps
+          ? Math.max(Math.round(accuracy), GPS_CACHE_MIN_ACCURACY_METERS)
+          : Math.round(accuracy)
+        : null,
+      source: isGps ? "gps" : "search",
+      cachedAt:
+        preserveTimestamp && Number.isFinite(cachedAt) && cachedAt > 0
+          ? cachedAt
+          : Date.now(),
+    };
+  }
+
+  function loadSelectedLocation() {
+    try {
+      const raw = window.localStorage.getItem(SELECTED_LOCATION_KEY);
+      if (!raw) return null;
+      const cachedLocation = createCachedLocation(JSON.parse(raw), true);
+      if (!cachedLocation) {
+        window.localStorage.removeItem(SELECTED_LOCATION_KEY);
+        return null;
+      }
+      // Også eldre cacheverdier blir straks skrevet tilbake i minimert format.
+      window.localStorage.setItem(
+        SELECTED_LOCATION_KEY,
+        JSON.stringify(cachedLocation)
+      );
+      return { ...cachedLocation, cached: true };
+    } catch {
+      return null;
+    }
+  }
+
+  function persistSelectedLocation(location) {
+    try {
+      if (!location) {
+        window.localStorage.removeItem(SELECTED_LOCATION_KEY);
+        return;
+      }
+      const cachedLocation = createCachedLocation(location);
+      if (!cachedLocation) return;
+      window.localStorage.setItem(
+        SELECTED_LOCATION_KEY,
+        JSON.stringify(cachedLocation)
+      );
+    } catch {
+      // Stedsvalget fungerer fortsatt i denne fanen når lokal lagring er blokkert.
     }
   }
 
@@ -168,6 +246,24 @@
     return `${(meters / 1000).toFixed(1).replace(".", ",")} km`;
   }
 
+  function showToast(message, type = "info", duration = 3500) {
+    if (!message) return;
+    toastMessage = message;
+    toastType = type;
+    if (toastTimer !== null) window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => {
+      toastMessage = "";
+      toastTimer = null;
+    }, duration);
+  }
+
+  onDestroy(() => {
+    if (toastTimer !== null) {
+      window.clearTimeout(toastTimer);
+      toastTimer = null;
+    }
+  });
+
   let activeTab = getTabFromPath();
   let todayWeather = null;
   let todayForecast = [];
@@ -177,6 +273,9 @@
   let hasError = false;
   let locationStatus = "";
   let needsManualPlaceSelection = false;
+  let toastMessage = "";
+  let toastType = "info";
+  let toastTimer = null;
   let communityRefreshKey = 0;
   let selectedLocation = null;
   let theme = getInitialTheme();
@@ -186,6 +285,7 @@
   let isRefreshing = false;
   let touchStartY = 0;
   let isTrackingPull = false;
+  let locationLoadSequence = 0;
   let placeSearch;
 
   $: visibleTabs = APP_TABS.filter(
@@ -196,10 +296,14 @@
   $: selectedLocationSource =
     selectedLocation?.source === "gps"
       ? Number.isFinite(Number(selectedLocation.accuracy))
-        ? `GPS · ± ${formatAccuracy(selectedLocation.accuracy)}`
-        : "GPS"
+        ? `${selectedLocation.cached ? "Lagret GPS" : "GPS"} · ± ${formatAccuracy(selectedLocation.accuracy)}`
+        : selectedLocation.cached
+          ? "Lagret GPS"
+          : "GPS"
       : selectedLocation?.source === "search"
-        ? "Søk"
+        ? selectedLocation.cached
+          ? "Lagret søk"
+          : "Søk"
         : "";
   $: document.documentElement.dataset.theme = theme;
 
@@ -207,9 +311,11 @@
     enteredData,
     showLoading = true,
     source = "search",
-    accuracy = null
+    accuracy = null,
+    cached = false
   ) {
-    if (!enteredData?.value) return;
+    if (!enteredData?.value) return false;
+    const loadId = ++locationLoadSequence;
     if (source !== "gps") locationStatus = "";
     const [latitude, longitude] = enteredData.value.split(" ");
     const nextLocation = {
@@ -218,27 +324,31 @@
       lon: Number(longitude),
       accuracy,
       source,
+      cached,
     };
 
+    selectedLocation = nextLocation;
+    persistSelectedLocation(nextLocation);
     hasError = false;
     if (showLoading) isLoading = true;
     const now = Math.floor(Date.now() / 1000);
 
     try {
       const [todayResponse, weekResponse] = await fetchWeatherData(latitude, longitude);
+      if (loadId !== locationLoadSequence) return false;
       todayForecast = getTodayForecastWeather(weekResponse, now);
       todayWeather = { city: enteredData.label, ...todayResponse };
-      selectedLocation = nextLocation;
       weekForecast = {
         city: enteredData.label,
         list: getWeekForecastWeather(weekResponse, ALL_DESCRIPTIONS),
       };
       needsManualPlaceSelection = false;
     } catch {
-      hasError = true;
+      if (loadId === locationLoadSequence) hasError = true;
     } finally {
-      isLoading = false;
+      if (loadId === locationLoadSequence) isLoading = false;
     }
+    return loadId === locationLoadSequence;
   }
 
   function toggleTheme() {
@@ -273,6 +383,7 @@
     }
 
     isLocating = true;
+    const locationSequenceAtStart = locationLoadSequence;
     locationStatus = "";
     needsManualPlaceSelection = false;
     try {
@@ -281,13 +392,20 @@
       const longitude = position.coords.longitude.toFixed(7);
       const accuracy = Number(position.coords.accuracy);
       const label = await reverseGeocode(latitude, longitude).catch(() => "Din posisjon");
-      await searchChangeHandler(
+      if (locationLoadSequence !== locationSequenceAtStart) return;
+      const isCurrentLocation = await searchChangeHandler(
         { value: `${latitude} ${longitude}`, label },
         true,
         "gps",
         accuracy
       );
-      locationStatus = `Bruker ${label} · nøyaktighet ca. ${formatAccuracy(accuracy)}. Posisjonen lagres ikke.`;
+      if (!isCurrentLocation) return;
+      locationStatus = "";
+      showToast(
+        `Bruker ${label} · nøyaktighet ca. ${formatAccuracy(accuracy)}.`,
+        "success",
+        POSITION_TOAST_DURATION_MS
+      );
     } catch (error) {
       locationStatus = getPositionStatusMessage(error);
       needsManualPlaceSelection = error?.message === "inaccurate";
@@ -306,7 +424,8 @@
         },
         true,
         selectedLocation.source || "refresh",
-        selectedLocation.accuracy || null
+        selectedLocation.accuracy || null,
+        Boolean(selectedLocation.cached)
       );
     }
     communityRefreshKey += 1;
@@ -358,6 +477,20 @@
     window.addEventListener("touchmove", handleTouchMove, { passive: false });
     window.addEventListener("touchend", handleTouchEnd, { passive: true });
     window.addEventListener("touchcancel", handleTouchEnd, { passive: true });
+
+    const storedLocation = loadSelectedLocation();
+    if (storedLocation) {
+      searchChangeHandler(
+        {
+          value: `${storedLocation.lat} ${storedLocation.lon}`,
+          label: storedLocation.name,
+        },
+        true,
+        storedLocation.source || "refresh",
+        storedLocation.accuracy || null,
+        true
+      );
+    }
 
     return () => {
       window.clearInterval(dateTimer);
@@ -433,6 +566,12 @@
         <strong title={selectedLocation.name}>{selectedLocation.name}</strong>
       </div>
       <span class="selected-location-source">{selectedLocationSource}</span>
+    </div>
+  {/if}
+
+  {#if toastMessage}
+    <div class={`toast toast-${toastType}`} role="status" aria-live="polite">
+      <span>{toastMessage}</span>
     </div>
   {/if}
 
