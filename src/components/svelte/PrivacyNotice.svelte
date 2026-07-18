@@ -36,7 +36,7 @@
       <div class="privacy-title">
         <ShieldCheck size={24} aria-hidden="true" />
         <div>
-          <span class="eyebrow">Sist oppdatert 17. juli 2026</span>
+          <span class="eyebrow">Sist oppdatert 18. juli 2026</span>
           <h2 id="privacy-title">Personvern på Værvakt.no</h2>
         </div>
       </div>
@@ -65,11 +65,13 @@
         <h3>Vær, søk og posisjon</h3>
         <p>
           GPS brukes bare når du trykker «Bruk posisjon» og godkjenner i nettleseren.
-          Koordinatene brukes i den åpne fanen for å hente vær og finne stedsnavn, og
-          lagres ikke av Værvakt etter besøket. Stedssøk og reserveoppslag går via
-          OpenStreetMap Nominatim. Værdata hentes fra Meteorologisk institutt, og norske
-          stedsnavn kan slås opp via Kartverket/Geonorge. Grunnlaget er å levere
-          tjenesten du ber om, jf. GDPR artikkel 6 nr. 1 bokstav b.
+          Koordinatene brukes til å hente vær og finne stedsnavn. Det valgte stedet
+          caches lokalt på enheten, slik at det kan brukes igjen ved neste besøk.
+          GPS-koordinater avrundes til tre desimaler før de skrives til denne cachen.
+          Stedssøk og reserveoppslag går via OpenStreetMap Nominatim. Værdata hentes fra
+          Meteorologisk institutt, og norske stedsnavn kan slås opp via
+          Kartverket/Geonorge. Grunnlaget er å levere tjenesten du ber om, jf. GDPR
+          artikkel 6 nr. 1 bokstav b.
         </p>
       </article>
 
@@ -101,10 +103,12 @@
         <p>
           Værvakt setter ikke informasjonskapsler og bruker ikke reklame- eller
           sporingsverktøy. Valgt lyst eller mørkt tema lagres lokalt til du endrer valget
-          eller sletter nettleserdata. GPS-posisjon og valgte steder brukes bare i minnet
-          mens siden er åpen og lagres ikke i nettleseren. Eldre posisjonslagring,
-          Værvakt-cache og service worker-cache fjernes automatisk ved oppstart. Alias
-          lagres ikke. Værvakt lager ikke individuelle besøksprofiler.
+          eller sletter nettleserdata. Det siste valgte stedet lagres lokalt på enheten
+          til du velger et annet sted eller sletter nettleserdata. Offentlige
+          badeplasser og målinger kan caches lokalt. POI-cachen er gyldig i 12 timer,
+          og utdaterte oppføringer ryddes neste gang cachen brukes. Den inneholder ikke
+          alias eller annen brukeridentifikator. Alias fra skjemaer lagres ikke i
+          nettleseren. Værvakt lager ikke individuelle besøksprofiler.
         </p>
       </article>
 

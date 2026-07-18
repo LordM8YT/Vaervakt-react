@@ -2,7 +2,11 @@ import { mount } from "svelte";
 import App from "./App.svelte";
 import "./app.css";
 
-const PERSISTED_LOCAL_KEYS = new Set(["vaervakt_theme"]);
+const PERSISTED_LOCAL_KEYS = new Set([
+  "vaervakt_theme",
+  "vaervakt_selected_location",
+  "vaervakt_bath_poi_cache_v1",
+]);
 
 const app = mount(App, {
   target: document.getElementById("app"),

@@ -25,6 +25,9 @@
   export let onOpenPrivacy = () => {};
 
   const VIPPS_URL = "https://betal.vipps.no/opy01u";
+  const BATH_POI_CACHE_KEY = "vaervakt_bath_poi_cache_v1";
+  const BATH_POI_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+  const BATH_POI_CACHE_MAX_LOCATIONS = 8;
   const REPORT_RANGE_OPTIONS = [
     { hours: 6, label: "6 timer" },
     { hours: 24, label: "24 timer" },
@@ -38,6 +41,95 @@
     { value: "Snø", label: "Snø", kind: "snow" },
     { value: "Torden", label: "Torden", kind: "thunder" },
   ];
+
+  function getBathPoiCacheLocationKey(lat, lon) {
+    const latitude = Number(lat);
+    const longitude = Number(lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return "";
+    return `${latitude.toFixed(2)},${longitude.toFixed(2)}`;
+  }
+
+  function sanitizeBathPoi(item) {
+    if (!item || typeof item !== "object") return null;
+    const name = String(item.name || "").trim().slice(0, 160);
+    const temperature =
+      item.temperature === null ||
+      item.temperature === undefined ||
+      item.temperature === ""
+        ? null
+        : Number(item.temperature);
+    const distanceKm =
+      item.distanceKm === null ||
+      item.distanceKm === undefined ||
+      item.distanceKm === ""
+        ? null
+        : Number(item.distanceKm);
+    if (!name || !Number.isFinite(temperature)) return null;
+
+    return {
+      name,
+      municipality: String(item.municipality || "").trim().slice(0, 120),
+      temperature,
+      distanceKm: distanceKm !== null && Number.isFinite(distanceKm) ? distanceKm : null,
+      time: String(item.time || "").trim().slice(0, 40),
+      heatedWater: Boolean(item.heatedWater),
+    };
+  }
+
+  function readBathPoiCache(lat, lon) {
+    const locationKey = getBathPoiCacheLocationKey(lat, lon);
+    if (!locationKey) return [];
+
+    try {
+      const cache = JSON.parse(window.localStorage.getItem(BATH_POI_CACHE_KEY) || "{}");
+      const now = Date.now();
+      Object.entries(cache).forEach(([key, value]) => {
+        const cachedAt = Number(value?.storedAt);
+        const cachedAge = now - cachedAt;
+        if (
+          !Number.isFinite(cachedAt) ||
+          cachedAge < 0 ||
+          cachedAge > BATH_POI_CACHE_MAX_AGE_MS ||
+          !Array.isArray(value?.items)
+        ) {
+          delete cache[key];
+        }
+      });
+      if (Object.keys(cache).length > 0) {
+        window.localStorage.setItem(BATH_POI_CACHE_KEY, JSON.stringify(cache));
+      } else {
+        window.localStorage.removeItem(BATH_POI_CACHE_KEY);
+      }
+      const entry = cache[locationKey];
+      if (!entry) return [];
+      return Array.isArray(entry.items)
+        ? entry.items.map(sanitizeBathPoi).filter(Boolean)
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function writeBathPoiCache(lat, lon, items) {
+    const locationKey = getBathPoiCacheLocationKey(lat, lon);
+    if (!locationKey || !Array.isArray(items)) return;
+
+    try {
+      const sanitizedItems = items.map(sanitizeBathPoi).filter(Boolean);
+      const cache = JSON.parse(window.localStorage.getItem(BATH_POI_CACHE_KEY) || "{}");
+      cache[locationKey] = { storedAt: Date.now(), items: sanitizedItems };
+      const newestEntries = Object.entries(cache)
+        .filter(([, entry]) => Array.isArray(entry?.items))
+        .sort(([, first], [, second]) => Number(second.storedAt) - Number(first.storedAt))
+        .slice(0, BATH_POI_CACHE_MAX_LOCATIONS);
+      window.localStorage.setItem(
+        BATH_POI_CACHE_KEY,
+        JSON.stringify(Object.fromEntries(newestEntries))
+      );
+    } catch {
+      // POI-ene hentes fortsatt fra nettet når lokal lagring er blokkert.
+    }
+  }
 
   function normalizeTemp(value) {
     const parsed = Number(String(value).replace(",", "."));
@@ -171,8 +263,16 @@
 
   async function refreshLocalData() {
     const loadId = ++loadSequence;
+    const cachedBathItems =
+      activeTab === "bath" && hasCoordinates
+        ? readBathPoiCache(location.lat, location.lon)
+        : [];
     isLoading = activeTab === "local";
-    isBathLoading = activeTab === "bath" && hasCoordinates;
+    isBathLoading =
+      activeTab === "bath" && hasCoordinates && cachedBathItems.length === 0;
+    if (activeTab === "bath" && cachedBathItems.length > 0) {
+      bathTemperatures = cachedBathItems;
+    }
 
     const reportRequest =
       activeTab === "local"
@@ -203,8 +303,11 @@
 
     if (bathResult.status === "fulfilled") {
       bathTemperatures = bathResult.value?.bathing?.nearby || [];
+      if (activeTab === "bath" && hasCoordinates) {
+        writeBathPoiCache(location.lat, location.lon, bathTemperatures);
+      }
     } else if (activeTab === "bath") {
-      bathTemperatures = [];
+      bathTemperatures = cachedBathItems;
     }
 
     const requestedResult = activeTab === "bath" ? bathResult : reportResult;
@@ -213,7 +316,9 @@
         severity: "warning",
         text:
           activeTab === "bath"
-            ? "Badetemperaturene kunne ikke lastes akkurat nå."
+            ? cachedBathItems.length > 0
+              ? "Kunne ikke oppdatere nå. Viser lagrede badeplasser fra de siste 12 timene."
+              : "Badetemperaturene kunne ikke lastes akkurat nå."
             : "Lokale rapporter kunne ikke lastes akkurat nå.",
       };
     }
