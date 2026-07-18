@@ -1,4 +1,4 @@
-const MET_API_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact";
+const MET_API_URL = "https://api.met.no/weatherapi/locationforecast/2.0/complete";
 const NOMINATIM_API_URL = "https://nominatim.openstreetmap.org/search";
 const NOMINATIM_REVERSE_API_URL = "https://nominatim.openstreetmap.org/reverse";
 const VAERVAKT_API_BASE = (import.meta.env.VITE_VAERVAKT_API_BASE || "").replace(/\/$/, "");

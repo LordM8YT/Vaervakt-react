@@ -7,6 +7,8 @@
   export let forecastList = [];
 
   const dayMonth = getDayMonthFromDate();
+  $: uvIndex =
+    data?.main?.uvIndex == null ? null : Number(data.main.uvIndex);
 </script>
 
 <section class="weather-column" aria-label="Været i dag">
@@ -56,8 +58,8 @@
         <SunMedium size={19} aria-hidden="true" />
         <span>UV-indeks</span>
         <strong>
-          {Number.isFinite(Number(data.main.uvIndex))
-            ? Number(data.main.uvIndex).toFixed(1).replace(".", ",")
+          {Number.isFinite(uvIndex)
+            ? uvIndex.toFixed(1).replace(".", ",")
             : "–"}
         </strong>
       </div>
